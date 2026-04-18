@@ -85,7 +85,7 @@ class _EditSlotSheetState extends State<_EditSlotSheet> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(status == 'present' ? '✅ Marked present for today' : '🚫 Marked absent for today'),
-          backgroundColor: status == 'present' ? DesignColor.green : DesignColor.rose,
+          backgroundColor: status == 'present' ? AppColors.green : AppColors.rose,
         ));
       }
     } catch (e) {
@@ -112,13 +112,13 @@ class _EditSlotSheetState extends State<_EditSlotSheet> {
     if (mounted) Navigator.pop(context);
   }
 
-  InputDecoration _deco(String label) => InputDecoration(
+  InputDecoration _deco(String label, BuildContext context) => InputDecoration(
     labelText: label,
-    labelStyle: const TextStyle(color: DesignColor.muted),
+    labelStyle: TextStyle(color: AppColors.textSecondary(context)),
     filled: true,
-    fillColor: DesignColor.s1,
-    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: DesignColor.border)),
-    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: DesignColor.indigo)),
+    fillColor: AppColors.surface(context),
+    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: AppColors.border(context))),
+    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.indigo)),
   );
 
   @override
@@ -128,45 +128,45 @@ class _EditSlotSheetState extends State<_EditSlotSheet> {
 
     return Container(
       padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(context).viewInsets.bottom + 20),
-      decoration: const BoxDecoration(
-        color: Color(0xFF0F1228),
-        borderRadius: BorderRadius.only(topLeft: Radius.circular(24), topRight: Radius.circular(24)),
-        border: Border(top: BorderSide(color: DesignColor.borderH)),
+      decoration: BoxDecoration(
+        color: AppColors.surface(context),
+        borderRadius: const BorderRadius.only(topLeft: Radius.circular(24), topRight: Radius.circular(24)),
+        border: Border(top: BorderSide(color: AppColors.border(context))),
       ),
       child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: DesignColor.border, borderRadius: BorderRadius.circular(2)))),
+            Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: AppColors.border(context), borderRadius: BorderRadius.circular(2)))),
             const SizedBox(height: 24),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('Edit Timetable Slot', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700, fontFamily: 'Syne')),
-                IconButton(icon: const Icon(Icons.delete_outline, color: DesignColor.rose), onPressed: _deleteSlot),
+                Text('Edit Timetable Slot', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 18, fontWeight: FontWeight.w700, fontFamily: 'Syne')),
+                IconButton(icon: const Icon(Icons.delete_outline, color: AppColors.rose), onPressed: _deleteSlot),
               ],
             ),
             const SizedBox(height: 16),
             TextField(
-              controller: _subjectCtrl, style: const TextStyle(color: Colors.white),
-              decoration: _deco('Subject Name'),
+              controller: _subjectCtrl, style: TextStyle(color: AppColors.textPrimary(context)),
+              decoration: _deco('Subject Name', context),
             ),
             const SizedBox(height: 12),
             Row(children: [
-              Expanded(child: TextField(controller: _roomCtrl, style: const TextStyle(color: Colors.white), decoration: _deco('Room (Optional)'))),
+              Expanded(child: TextField(controller: _roomCtrl, style: TextStyle(color: AppColors.textPrimary(context)), decoration: _deco('Room (Optional)', context))),
               const SizedBox(width: 12),
               Expanded(child: DropdownButtonFormField<String>(
-                value: _slotType, dropdownColor: const Color(0xFF0F1228), style: const TextStyle(color: Colors.white),
-                decoration: _deco('Record Type'),
+                value: _slotType, dropdownColor: AppColors.surface(context), style: TextStyle(color: AppColors.textPrimary(context)),
+                decoration: _deco('Record Type', context),
                 items: ['lecture', 'lab', 'tutorial'].map((e) => DropdownMenuItem(value: e, child: Text(e[0].toUpperCase() + e.substring(1)))).toList(),
                 onChanged: (v) => setState(() => _slotType = v!),
               )),
             ]),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: _dayOfWeek, dropdownColor: const Color(0xFF0F1228), style: const TextStyle(color: Colors.white),
-              decoration: _deco('Day of Week'),
+              value: _dayOfWeek, dropdownColor: AppColors.surface(context), style: TextStyle(color: AppColors.textPrimary(context)),
+              decoration: _deco('Day of Week', context),
               items: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].map((e) => DropdownMenuItem(value: e, child: Text(e[0].toUpperCase() + e.substring(1)))).toList(),
               onChanged: (v) => setState(() => _dayOfWeek = v!),
             ),
@@ -176,10 +176,10 @@ class _EditSlotSheetState extends State<_EditSlotSheet> {
                 onTap: () => _pickTime(true),
                 child: Container(
                   padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-                  decoration: BoxDecoration(color: DesignColor.s1, borderRadius: BorderRadius.circular(12), border: Border.all(color: DesignColor.border)),
+                  decoration: BoxDecoration(color: AppColors.surface(context), borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.border(context))),
                   child: Row(children: [
-                    const Icon(Icons.access_time, size: 16, color: DesignColor.muted), const SizedBox(width: 8),
-                    Text(_startTime, style: const TextStyle(color: Colors.white)),
+                    Icon(Icons.access_time, size: 16, color: AppColors.textSecondary(context)), const SizedBox(width: 8),
+                    Text(_startTime, style: TextStyle(color: AppColors.textPrimary(context))),
                   ]),
                 ),
               )),
@@ -188,26 +188,26 @@ class _EditSlotSheetState extends State<_EditSlotSheet> {
                 onTap: () => _pickTime(false),
                 child: Container(
                   padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-                  decoration: BoxDecoration(color: DesignColor.s1, borderRadius: BorderRadius.circular(12), border: Border.all(color: DesignColor.border)),
+                  decoration: BoxDecoration(color: AppColors.surface(context), borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.border(context))),
                   child: Row(children: [
-                    const Icon(Icons.access_time_filled, size: 16, color: DesignColor.muted), const SizedBox(width: 8),
-                    Text(_endTime, style: const TextStyle(color: Colors.white)),
+                    Icon(Icons.access_time_filled, size: 16, color: AppColors.textSecondary(context)), const SizedBox(width: 8),
+                    Text(_endTime, style: TextStyle(color: AppColors.textPrimary(context))),
                   ]),
                 ),
               )),
             ]),
             const SizedBox(height: 24),
-            const Divider(color: DesignColor.border),
+            Divider(color: AppColors.border(context)),
             const SizedBox(height: 16),
-            const Text('Mark Attendance (Today)', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700, fontFamily: 'Syne')),
+            Text('Mark Attendance (Today)', style: TextStyle(color: AppColors.textPrimary(context), fontSize: 16, fontWeight: FontWeight.w700, fontFamily: 'Syne')),
             const SizedBox(height: 12),
             Row(children: [
               Expanded(
                 child: FilledButton.icon(
                   onPressed: () => _markAttendance('present'),
                   style: FilledButton.styleFrom(
-                    backgroundColor: currentStatus == 'present' ? DesignColor.green : DesignColor.green.withOpacity(0.12),
-                    foregroundColor: currentStatus == 'present' ? Colors.white : DesignColor.green,
+                    backgroundColor: currentStatus == 'present' ? AppColors.green : AppColors.green.withOpacity(0.12),
+                    foregroundColor: currentStatus == 'present' ? Colors.white : AppColors.green,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                   icon: const Icon(Icons.check, size: 18),
@@ -219,8 +219,8 @@ class _EditSlotSheetState extends State<_EditSlotSheet> {
                 child: FilledButton.icon(
                   onPressed: () => _markAttendance('absent'),
                   style: FilledButton.styleFrom(
-                    backgroundColor: currentStatus == 'absent' ? DesignColor.rose : DesignColor.rose.withOpacity(0.12),
-                    foregroundColor: currentStatus == 'absent' ? Colors.white : DesignColor.rose,
+                    backgroundColor: currentStatus == 'absent' ? AppColors.rose : AppColors.rose.withOpacity(0.12),
+                    foregroundColor: currentStatus == 'absent' ? Colors.white : AppColors.rose,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                   icon: const Icon(Icons.close, size: 18),

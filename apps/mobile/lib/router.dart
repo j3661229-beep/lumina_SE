@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'features/auth/auth_screen.dart';
+import 'features/home/home_screen.dart';
 import 'features/timetable/timetable_screen.dart';
 import 'features/timetable/ocr_parser_screen.dart';
 import 'features/timetable/attendance_screen.dart';
@@ -19,7 +20,7 @@ import 'features/context_switch/flow_graph_screen.dart';
 import 'shared/widgets/home_shell.dart';
 
 final router = GoRouter(
-  initialLocation: '/home',
+  initialLocation: '/dashboard',
   // ── Catch OAuth deep links before GoRouter tries to route them ────────────
   // Supabase implicit flow returns tokens in the URL fragment which GoRouter
   // cannot route. Redirect login-callback to /home (session is set by Supabase SDK).
@@ -28,18 +29,18 @@ final router = GoRouter(
     final uri = state.uri;
     if (uri.host == 'login-callback' || uri.path.contains('login-callback')) {
       final loggedIn = Supabase.instance.client.auth.currentSession != null;
-      return loggedIn ? '/home' : '/auth';
+      return loggedIn ? '/dashboard' : '/auth';
     }
     final loggedIn = Supabase.instance.client.auth.currentSession != null;
     final onAuth = uri.path == '/auth';
     if (!loggedIn && !onAuth) return '/auth';
-    if (loggedIn && onAuth) return '/home';
+    if (loggedIn && onAuth) return '/dashboard';
     return null;
   },
   // Fallback for any unmatched deep-link route (e.g. io.supabase.lumina://*)
   errorBuilder: (ctx, state) {
     final loggedIn = Supabase.instance.client.auth.currentSession != null;
-    return loggedIn ? const TimetableScreen() : const AuthScreen();
+    return loggedIn ? const HomeScreen() : const AuthScreen();
   },
   refreshListenable: GoRouterRefreshStream(
     Supabase.instance.client.auth.onAuthStateChange,
@@ -49,6 +50,7 @@ final router = GoRouter(
     ShellRoute(
       builder: (ctx, state, child) => HomeShell(child: child),
       routes: [
+        GoRoute(path: '/dashboard', builder: (_, __) => const HomeScreen()),
         GoRoute(path: '/home', builder: (_, __) => const TimetableScreen()),
         GoRoute(path: '/groups', builder: (_, __) => const GroupsScreen()),
         GoRoute(path: '/calendar', builder: (_, __) => const HeatmapScreen()),

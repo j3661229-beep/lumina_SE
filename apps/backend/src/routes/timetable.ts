@@ -364,12 +364,16 @@ router.get('/bunk-analytics', requireAuth, async (req: AuthRequest, res) => {
   }
 
   const result = Object.values(subjectMap).map((s) => ({
-    ...s,
-    attendance_pct: s.total > 0 ? Math.round((s.present / s.total) * 100) : null,
-    // 75% rule: need to attend at least 75% → can bunk floor((total * 0.25)) more
-    can_bunk: s.total > 0
+    subject_name: s.subject_name,
+    teacher: s.teacher,
+    color_hex: s.color_hex,
+    attended: s.present,
+    absent: s.absent,
+    total_held: s.total,
+    percentage: s.total > 0 ? Math.round((s.present / s.total) * 100) : 0,
+    bunks_remaining: s.total > 0
       ? Math.max(0, Math.floor(s.present / 0.75) - s.total)
-      : null,
+      : 0,
     needs_to_attend: s.total > 0 && (s.present / s.total) < 0.75
       ? Math.ceil((0.75 * s.total - s.present) / 0.25)
       : 0,

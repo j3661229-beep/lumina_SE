@@ -16,6 +16,7 @@ import groupsRouter from './routes/groups';
 import authRouter from './routes/auth';
 import profileRouter from './routes/profile';
 import demoRouter from './routes/demo';
+import ragRouter from './routes/rag';
 
 const app = express();
 
@@ -42,6 +43,7 @@ app.use('/api/expenses', expensesRouter);
 app.use('/api/groups', groupsRouter);
 app.use('/api/profile', profileRouter);
 app.use('/api/demo', demoRouter);
+app.use('/api/rag', ragRouter);
 
 // Global error handler
 app.use(

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import '../../core/theme/design_tokens.dart';
 import 'rag_provider.dart';
 
@@ -18,7 +17,8 @@ class _RagScreenState extends ConsumerState<RagScreen>
   late final AnimationController _pulseCtrl;
   late final Animation<double> _pulse;
 
-  String? _answer;
+  // Chat history
+  final List<_ChatMessage> _messages = [];
   bool _isQuerying = false;
   bool _showDocs = false;
 
@@ -27,8 +27,8 @@ class _RagScreenState extends ConsumerState<RagScreen>
     super.initState();
     _pulseCtrl = AnimationController(vsync: this, duration: const Duration(seconds: 2))
       ..repeat(reverse: true);
-    _pulse = Tween<double>(begin: 0.8, end: 1.0).animate(
-      CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut));
+    _pulse = Tween<double>(begin: 0.6, end: 1.0)
+        .animate(CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut));
   }
 
   @override
@@ -39,372 +39,418 @@ class _RagScreenState extends ConsumerState<RagScreen>
     super.dispose();
   }
 
-  Future<void> _askQuestion() async {
+  Future<void> _ask() async {
     final q = _queryCtrl.text.trim();
-    if (q.isEmpty) return;
+    if (q.isEmpty || _isQuerying) return;
     HapticFeedback.mediumImpact();
-    setState(() { _isQuerying = true; _answer = null; });
+    _queryCtrl.clear();
+    setState(() {
+      _messages.add(_ChatMessage(text: q, isUser: true));
+      _isQuerying = true;
+    });
+    _scrollToBottom();
     try {
       final answer = await ref.read(ragProvider.notifier).query(q);
-      setState(() { _answer = answer; _isQuerying = false; });
-      // Scroll to answer
-      await Future.delayed(const Duration(milliseconds: 100));
-      if (_scrollCtrl.hasClients) {
-        _scrollCtrl.animateTo(
-          _scrollCtrl.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 400),
-          curve: Curves.easeOut,
-        );
-      }
+      setState(() {
+        _messages.add(_ChatMessage(text: answer, isUser: false));
+        _isQuerying = false;
+      });
     } catch (e) {
-      setState(() { _answer = '⚠️ Error: $e'; _isQuerying = false; });
+      setState(() {
+        _messages.add(_ChatMessage(text: '⚠️ Error: $e', isUser: false, isError: true));
+        _isQuerying = false;
+      });
     }
+    _scrollToBottom();
+  }
+
+  void _scrollToBottom() {
+    Future.delayed(const Duration(milliseconds: 150), () {
+      if (_scrollCtrl.hasClients) {
+        _scrollCtrl.animateTo(_scrollCtrl.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 400), curve: Curves.easeOut);
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = context.isDark;
     final ragAsync = ref.watch(ragProvider);
 
     return Scaffold(
-      backgroundColor: DesignColor.bg,
-      body: Stack(children: [
-        // Ambient glows
-        Positioned(top: -100, right: -80,
-          child: _GlowOrb(color: const Color(0xFF8B5CF6), size: 300, opacity: 0.15)),
-        Positioned(bottom: 100, left: -60,
-          child: _GlowOrb(color: DesignColor.cyan, size: 220, opacity: 0.1)),
-
-        SafeArea(child: Column(children: [
-          // ── Header ──────────────────────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
-            child: Row(children: [
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('Second Brain', style: TextStyle(
-                  fontFamily: 'Syne', fontSize: 20, fontWeight: FontWeight.w800, color: DesignColor.text)),
-                ragAsync.when(
-                  loading: () => const Text('Initialising…', style: TextStyle(color: DesignColor.sub, fontSize: 11)),
-                  error: (_, __) => const SizedBox(),
-                  data: (s) => Text('${s.docs.length} docs · ${s.totalChunks} chunks indexed',
-                    style: const TextStyle(color: DesignColor.sub, fontSize: 11)),
-                ),
-              ])),
-              // Docs toggle
-              GestureDetector(
-                onTap: () => setState(() => _showDocs = !_showDocs),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: _showDocs ? DesignColor.indigoGlow : DesignColor.s1,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: _showDocs ? DesignColor.borderH : DesignColor.border),
-                  ),
-                  child: Icon(Icons.auto_stories_outlined,
-                    size: 18, color: _showDocs ? DesignColor.indigo : DesignColor.sub),
-                ),
-              ),
-            ]),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      body: Column(children: [
+        // ── Header ─────────────────────────────────────────────────────────
+        Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: isDark
+                  ? [AppColors.violet.withOpacity(0.25), Colors.transparent]
+                  : [AppColors.violet.withOpacity(0.08), Colors.transparent],
+              begin: Alignment.topLeft, end: Alignment.bottomRight,
+            ),
           ),
-
-          const SizedBox(height: 14),
-
-          // ── Online indicator + RAG description ──────────────────────────
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 18),
-            child: Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0x1A8B5CF6), Color(0x1406B6D4)],
-                  begin: Alignment.topLeft, end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: DesignColor.borderH),
-              ),
+          child: SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
               child: Row(children: [
-                ScaleTransition(
-                  scale: _pulse,
-                  child: Container(
-                    width: 8, height: 8,
-                    decoration: const BoxDecoration(
-                      color: DesignColor.green,
-                      shape: BoxShape.circle,
-                      boxShadow: [BoxShadow(color: DesignColor.green, blurRadius: 6)],
-                    ),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('Second Brain', style: TextStyle(
+                    fontFamily: 'Syne', fontSize: 22, fontWeight: FontWeight.w800,
+                    color: cs.onSurface)),
+                  ragAsync.when(
+                    loading: () => Text('Loading…', style: TextStyle(
+                      color: cs.onSurface.withOpacity(0.45), fontSize: 11)),
+                    error: (_, __) => const SizedBox(),
+                    data: (s) => Row(children: [
+                      // Pulse dot
+                      ScaleTransition(
+                        scale: _pulse,
+                        child: Container(
+                          width: 7, height: 7,
+                          decoration: const BoxDecoration(
+                            color: AppColors.green, shape: BoxShape.circle,
+                            boxShadow: [BoxShadow(color: AppColors.green, blurRadius: 6)]),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text('Offline AI · ${s.docs.length} docs · ${s.totalChunks} chunks',
+                        style: TextStyle(color: cs.onSurface.withOpacity(0.45), fontSize: 11)),
+                    ]),
                   ),
+                ])),
+                // Docs toggle
+                _NavBtn(
+                  icon: _showDocs ? Icons.auto_stories_rounded : Icons.auto_stories_outlined,
+                  active: _showDocs,
+                  onTap: () => setState(() => _showDocs = !_showDocs),
                 ),
-                const SizedBox(width: 10),
-                const Expanded(child: Text(
-                  'Local-first RAG — Index once, query forever offline. '
-                  'Embeddings stay on your device.',
-                  style: TextStyle(color: DesignColor.sub, fontSize: 12, height: 1.4),
-                )),
+                const SizedBox(width: 8),
+                // Clear chat
+                if (_messages.isNotEmpty)
+                  _NavBtn(
+                    icon: Icons.cleaning_services_outlined,
+                    active: false,
+                    onTap: () => setState(() => _messages.clear()),
+                  ),
               ]),
             ),
           ),
+        ),
 
-          const SizedBox(height: 14),
-
-          // ── Indexing progress bar ────────────────────────────────────────
-          ragAsync.when(
-            loading: () => const LinearProgressIndicator(color: DesignColor.indigo, backgroundColor: DesignColor.s1),
-            error: (e, _) => Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 18),
-              child: Text('Error: $e', style: const TextStyle(color: DesignColor.rose, fontSize: 12)),
-            ),
-            data: (s) => s.isIndexing
-                ? Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 18),
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(s.indexingStatus ?? '', style: const TextStyle(color: DesignColor.sub, fontSize: 11)),
-                      const SizedBox(height: 6),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(4),
-                        child: LinearProgressIndicator(
-                          value: s.indexProgress,
-                          color: DesignColor.indigo,
-                          backgroundColor: DesignColor.s1,
-                          minHeight: 4,
-                        ),
-                      ),
-                    ]),
-                  )
-                : s.indexingStatus != null
-                    ? Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 18),
-                        child: Text(s.indexingStatus!, style: const TextStyle(color: DesignColor.sub, fontSize: 11)),
-                      )
-                    : const SizedBox(),
+        // ── Documents shelf ─────────────────────────────────────────────────
+        if (_showDocs)
+          ragAsync.maybeWhen(
+            data: (s) => s.docs.isEmpty
+                ? _EmptyDocsBar(onUpload: () => ref.read(ragProvider.notifier).pickAndIndex())
+                : _DocsShelf(
+                    docs: s.docs,
+                    isIndexing: s.isIndexing,
+                    progress: s.indexProgress,
+                    statusText: s.indexingStatus,
+                    onDelete: (id) => ref.read(ragProvider.notifier).deleteDoc(id),
+                    onAdd: () => ref.read(ragProvider.notifier).pickAndIndex(),
+                  ),
+            orElse: () => const SizedBox(),
           ),
 
-          // ── Documents list (collapsible) ─────────────────────────────────
-          if (_showDocs)
-            ragAsync.maybeWhen(
-              data: (s) => s.docs.isEmpty
-                  ? Padding(
-                      padding: const EdgeInsets.all(18),
-                      child: _EmptyState(onUpload: () => ref.read(ragProvider.notifier).pickAndIndex()),
-                    )
-                  : SizedBox(
-                      height: 160,
-                      child: ListView.builder(
-                        scrollDirection: Axis.horizontal,
-                        padding: const EdgeInsets.symmetric(horizontal: 18),
-                        itemCount: s.docs.length + 1,
-                        itemBuilder: (ctx, i) {
-                          if (i == s.docs.length) {
-                            return _AddDocCard(onTap: () => ref.read(ragProvider.notifier).pickAndIndex());
-                          }
-                          final doc = s.docs[i];
-                          return _DocCard(
-                            doc: doc,
-                            onDelete: () => ref.read(ragProvider.notifier).deleteDoc(doc.docId),
-                          );
-                        },
-                      ),
-                    ),
-              orElse: () => const SizedBox(),
-            ),
+        // ── Divider ─────────────────────────────────────────────────────────
+        Container(height: 0.5, color: AppColors.border(context)),
 
-          // ── Main chat area ───────────────────────────────────────────────
-          Expanded(
-            child: ragAsync.maybeWhen(
-              data: (s) => s.docs.isEmpty && !_showDocs
-                  ? _EmptyState(onUpload: () => ref.read(ragProvider.notifier).pickAndIndex())
-                  : _AnswerArea(
-                      answer: _answer,
-                      isQuerying: _isQuerying,
-                      scrollCtrl: _scrollCtrl,
-                      query: _queryCtrl.text,
-                    ),
-              orElse: () => const Center(child: CircularProgressIndicator(color: DesignColor.indigo)),
-            ),
+        // ── Chat area ──────────────────────────────────────────────────────
+        Expanded(
+          child: ragAsync.maybeWhen(
+            data: (s) => s.docs.isEmpty && _messages.isEmpty
+                ? _EmptyState(onUpload: () => ref.read(ragProvider.notifier).pickAndIndex())
+                : _ChatArea(
+                    messages: _messages,
+                    isQuerying: _isQuerying,
+                    scrollCtrl: _scrollCtrl,
+                  ),
+            orElse: () => const Center(child: CircularProgressIndicator(color: AppColors.indigo)),
           ),
+        ),
 
-          // ── Query input ──────────────────────────────────────────────────
-          _QueryBar(
-            ctrl: _queryCtrl,
-            isQuerying: _isQuerying,
-            onSend: _askQuestion,
-            onUpload: () => ref.read(ragProvider.notifier).pickAndIndex(),
-          ),
-        ])),
+        // ── Suggestions ─────────────────────────────────────────────────────
+        if (_messages.isEmpty)
+          _Suggestions(onTap: (s) {
+            _queryCtrl.text = s;
+            _ask();
+          }),
+
+        // ── Input bar ──────────────────────────────────────────────────────
+        _InputBar(
+          ctrl: _queryCtrl,
+          isQuerying: _isQuerying,
+          onSend: _ask,
+          onUpload: () => ref.read(ragProvider.notifier).pickAndIndex(),
+        ),
       ]),
     );
   }
 }
 
-// ── Answer display area ───────────────────────────────────────────────────────
-class _AnswerArea extends StatelessWidget {
-  final String? answer;
+// ── Chat message model ────────────────────────────────────────────────────────
+class _ChatMessage {
+  final String text;
+  final bool isUser;
+  final bool isError;
+  const _ChatMessage({required this.text, required this.isUser, this.isError = false});
+}
+
+// ── Chat area ─────────────────────────────────────────────────────────────────
+class _ChatArea extends StatelessWidget {
+  final List<_ChatMessage> messages;
   final bool isQuerying;
   final ScrollController scrollCtrl;
-  final String query;
-  const _AnswerArea({required this.answer, required this.isQuerying, required this.scrollCtrl, required this.query});
+  const _ChatArea({required this.messages, required this.isQuerying, required this.scrollCtrl});
 
   @override
   Widget build(BuildContext context) {
-    if (answer == null && !isQuerying) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(32),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Icon(Icons.psychology_outlined, size: 56, color: DesignColor.indigo),
-            SizedBox(height: 14),
-            Text('Ask anything about your notes', textAlign: TextAlign.center,
-              style: TextStyle(color: DesignColor.sub, fontSize: 14, height: 1.5)),
-            SizedBox(height: 8),
-            Text('"Explain Dijkstra\'s algorithm"\n"What is the formula for…"\n"Summarise chapter 3"',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: DesignColor.muted, fontSize: 12, height: 1.6, fontStyle: FontStyle.italic)),
-          ]),
-        ),
-      );
-    }
-
-    return ListView(
+    final cs = Theme.of(context).colorScheme;
+    final isDark = context.isDark;
+    return ListView.builder(
       controller: scrollCtrl,
-      padding: const EdgeInsets.fromLTRB(18, 8, 18, 8),
-      children: [
-        if (query.isNotEmpty) ...[
-          // User question bubble
-          Align(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      itemCount: messages.length + (isQuerying ? 1 : 0),
+      itemBuilder: (ctx, i) {
+        if (i == messages.length && isQuerying) {
+          return _ThinkingBubble();
+        }
+        final msg = messages[i];
+        if (msg.isUser) {
+          return Align(
             alignment: Alignment.centerRight,
             child: Container(
-              constraints: const BoxConstraints(maxWidth: 280),
-              margin: const EdgeInsets.only(bottom: 12),
+              constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
+              margin: const EdgeInsets.only(bottom: 12, left: 40),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
-                  colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                  colors: [AppColors.indigo, AppColors.violet],
                   begin: Alignment.topLeft, end: Alignment.bottomRight,
                 ),
                 borderRadius: const BorderRadius.only(
                   topLeft: Radius.circular(18), topRight: Radius.circular(18),
                   bottomLeft: Radius.circular(18), bottomRight: Radius.circular(4),
                 ),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.indigo.withOpacity(isDark ? 0.3 : 0.15), 
+                    blurRadius: 12, offset: const Offset(0, 4)
+                  )
+                ],
               ),
-              child: Text(query,
-                style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500)),
+              child: Text(msg.text, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500)),
             ),
-          ),
-        ],
-        if (isQuerying)
-          Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            padding: const EdgeInsets.all(16),
-            decoration: DesignStyles.glassCard(),
-            child: const Row(children: [
-              SizedBox(width: 16, height: 16,
-                child: CircularProgressIndicator(strokeWidth: 2, color: DesignColor.indigo)),
-              SizedBox(width: 12),
-              Text('Searching your notes…', style: TextStyle(color: DesignColor.sub, fontSize: 13)),
-            ]),
-          )
-        else if (answer != null)
-          Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            padding: const EdgeInsets.all(16),
+          );
+        }
+        return Align(
+          alignment: Alignment.centerLeft,
+          child: Container(
+            constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.85),
+            margin: const EdgeInsets.only(bottom: 12, right: 40),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
-              color: DesignColor.s1,
-              borderRadius: BorderRadius.circular(18),
-              border: const Border(left: BorderSide(color: DesignColor.indigo, width: 3)),
+              color: msg.isError
+                  ? AppColors.rose.withOpacity(0.1)
+                  : AppColors.surfaceContainer(context),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(18), topRight: Radius.circular(18),
+                bottomLeft: Radius.circular(4), bottomRight: Radius.circular(18),
+              ),
+              border: Border.all(
+                color: msg.isError ? AppColors.rose.withOpacity(0.5) : AppColors.border(context),
+              ),
             ),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
-                Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                    color: DesignColor.indigoGlow,
-                    borderRadius: BorderRadius.circular(6),
+              if (!msg.isError)
+                Row(children: [
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(colors: [AppColors.indigo, AppColors.violet]),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Icon(Icons.auto_awesome, size: 11, color: Colors.white),
                   ),
-                  child: const Icon(Icons.auto_awesome, size: 12, color: DesignColor.indigo),
-                ),
-                const SizedBox(width: 8),
-                const Text('Lumina AI', style: TextStyle(
-                  color: DesignColor.indigo, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.4)),
-              ]),
-              const SizedBox(height: 10),
-              SelectableText(answer!,
-                style: const TextStyle(
-                  color: DesignColor.text, fontSize: 14, height: 1.6)),
+                  const SizedBox(width: 7),
+                  Text('Lumina AI', style: TextStyle(
+                    color: AppColors.indigo, fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.5)),
+                ]),
+              if (!msg.isError) const SizedBox(height: 10),
+              SelectableText(msg.text, style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurface, fontSize: 14, height: 1.65)),
             ]),
           ),
-      ],
+        );
+      },
     );
   }
 }
 
-// ── Query bar ─────────────────────────────────────────────────────────────────
-class _QueryBar extends StatelessWidget {
-  final TextEditingController ctrl;
-  final bool isQuerying;
-  final VoidCallback onSend;
-  final VoidCallback onUpload;
-  const _QueryBar({required this.ctrl, required this.isQuerying, required this.onSend, required this.onUpload});
+// ── Typing indicator ──────────────────────────────────────────────────────────
+class _ThinkingBubble extends StatefulWidget {
+  @override
+  State<_ThinkingBubble> createState() => _ThinkingBubbleState();
+}
+
+class _ThinkingBubbleState extends State<_ThinkingBubble> with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  late Animation<double> _anim;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 900))..repeat(reverse: true);
+    _anim = Tween<double>(begin: 0.3, end: 1.0).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
+  }
+
+  @override
+  void dispose() { _ctrl.dispose(); super.dispose(); }
 
   @override
   Widget build(BuildContext context) {
+    final isDark = context.isDark;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+        decoration: BoxDecoration(
+          color: AppColors.cardBg(context),
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(4), topRight: Radius.circular(18),
+            bottomLeft: Radius.circular(18), bottomRight: Radius.circular(18),
+          ),
+          border: Border.all(color: AppColors.border(context)),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: List.generate(3, (i) =>
+          AnimatedBuilder(
+            animation: _anim,
+            builder: (_, __) => Container(
+              margin: const EdgeInsets.only(right: 4),
+              width: 7, height: 7,
+              decoration: BoxDecoration(
+                color: AppColors.indigo.withOpacity(
+                  ((_anim.value + (i * 0.33)) % 1.0).clamp(0.2, 1.0)),
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+        )),
+      ),
+    );
+  }
+}
+
+// ── Suggestion chips ──────────────────────────────────────────────────────────
+class _Suggestions extends StatelessWidget {
+  final ValueChanged<String> onTap;
+  const _Suggestions({required this.onTap});
+
+  static const _items = [
+    'Explain Dijkstra\'s algorithm',
+    'Summarise chapter 3',
+    'Key formulas for exam',
+    'What is this topic about?',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Container(
-      padding: EdgeInsets.fromLTRB(14, 10, 14, MediaQuery.of(context).padding.bottom + 12),
-      decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: DesignColor.border)),
-        color: DesignColor.bg,
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('Try asking…', style: TextStyle(color: cs.onSurface.withOpacity(0.4), fontSize: 11, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 8),
+        Wrap(spacing: 8, runSpacing: 6, children: _items.map((s) =>
+          GestureDetector(
+            onTap: () => onTap(s),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(
+                color: AppColors.indigo.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: AppColors.indigo.withOpacity(0.2)),
+              ),
+              child: Text(s, style: const TextStyle(
+                color: AppColors.indigo, fontSize: 11.5, fontWeight: FontWeight.w600)),
+            ),
+          ),
+        ).toList()),
+      ]),
+    );
+  }
+}
+
+// ── Input bar ─────────────────────────────────────────────────────────────────
+class _InputBar extends StatelessWidget {
+  final TextEditingController ctrl;
+  final bool isQuerying;
+  final VoidCallback onSend, onUpload;
+  const _InputBar({required this.ctrl, required this.isQuerying, required this.onSend, required this.onUpload});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = context.isDark;
+    return Container(
+      padding: EdgeInsets.fromLTRB(12, 10, 12, MediaQuery.of(context).padding.bottom + 12),
+      decoration: BoxDecoration(
+        color: AppColors.surface(context),
+        border: Border(top: BorderSide(color: cs.onSurface.withOpacity(0.08))),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(isDark ? 0.2 : 0.04), blurRadius: 20, offset: const Offset(0, -4))],
       ),
       child: Row(children: [
-        // Upload button
-        GestureDetector(
-          onTap: onUpload,
-          child: Container(
-            width: 44, height: 44,
-            decoration: BoxDecoration(
-              color: DesignColor.s1,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: DesignColor.border),
-            ),
-            child: const Icon(Icons.upload_file_outlined, size: 20, color: DesignColor.sub),
-          ),
-        ),
+        // Upload
+        _BarBtn(icon: Icons.upload_file_outlined, onTap: onUpload,
+          color: cs.onSurface.withOpacity(0.5)),
         const SizedBox(width: 10),
-        // Text field
-        Expanded(
-          child: Container(
-            decoration: BoxDecoration(
-              color: DesignColor.s1,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: DesignColor.border),
-            ),
-            child: TextField(
-              controller: ctrl,
-              style: const TextStyle(color: DesignColor.text, fontSize: 14),
-              decoration: const InputDecoration(
-                hintText: 'Ask about your notes or PDFs…',
-                hintStyle: TextStyle(color: DesignColor.muted, fontSize: 13),
-                border: InputBorder.none,
-                contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              ),
-              onSubmitted: (_) => onSend(),
-              textInputAction: TextInputAction.send,
-            ),
+        // Input
+        Expanded(child: Container(
+          decoration: BoxDecoration(
+            color: cs.onSurface.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: cs.onSurface.withOpacity(0.1)),
           ),
-        ),
+          child: TextField(
+            controller: ctrl,
+            style: TextStyle(color: cs.onSurface, fontSize: 14),
+            decoration: InputDecoration(
+              hintText: 'Ask anything about your notes…',
+              hintStyle: TextStyle(color: cs.onSurface.withOpacity(0.35), fontSize: 13),
+              border: InputBorder.none, enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none, filled: false,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            ),
+            onSubmitted: (_) => onSend(),
+            textInputAction: TextInputAction.send,
+            maxLines: null,
+          ),
+        )),
         const SizedBox(width: 10),
-        // Send button
+        // Send
         GestureDetector(
           onTap: isQuerying ? null : onSend,
-          child: Container(
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
             width: 44, height: 44,
             decoration: BoxDecoration(
               gradient: isQuerying ? null : const LinearGradient(
-                colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                colors: [AppColors.indigo, AppColors.violet],
                 begin: Alignment.topLeft, end: Alignment.bottomRight,
               ),
-              color: isQuerying ? DesignColor.s1 : null,
-              borderRadius: BorderRadius.circular(12),
+              color: isQuerying ? cs.onSurface.withOpacity(0.08) : null,
+              borderRadius: BorderRadius.circular(22),
+              boxShadow: isQuerying ? [] : [const BoxShadow(color: Color(0x506366F1), blurRadius: 12, offset: Offset(0, 4))],
             ),
             child: isQuerying
                 ? const Center(child: SizedBox(width: 18, height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: DesignColor.indigo)))
+                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.indigo)))
                 : const Icon(Icons.send_rounded, size: 18, color: Colors.white),
           ),
         ),
@@ -413,129 +459,225 @@ class _QueryBar extends StatelessWidget {
   }
 }
 
-// ── Document card ─────────────────────────────────────────────────────────────
-class _DocCard extends StatelessWidget {
-  final ({String docId, String docTitle, String docType, int chunks, DateTime addedAt}) doc;
-  final VoidCallback onDelete;
-  const _DocCard({required this.doc, required this.onDelete});
-
-  @override
-  Widget build(BuildContext context) {
-    final isPdf = doc.docType.toLowerCase() == 'pdf';
-    return Container(
-      width: 150,
-      margin: const EdgeInsets.only(right: 10, bottom: 4, top: 4),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: DesignColor.s1,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: DesignColor.border),
-      ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          Icon(isPdf ? Icons.picture_as_pdf_outlined : Icons.description_outlined,
-            size: 22, color: isPdf ? DesignColor.rose : DesignColor.cyan),
-          GestureDetector(
-            onTap: onDelete,
-            child: const Icon(Icons.delete_outline, size: 16, color: DesignColor.muted),
-          ),
-        ]),
-        const SizedBox(height: 8),
-        Text(doc.docTitle,
-          style: const TextStyle(color: DesignColor.text, fontSize: 12, fontWeight: FontWeight.w600),
-          maxLines: 2, overflow: TextOverflow.ellipsis),
-        const Spacer(),
-        Text('${doc.chunks} chunks',
-          style: const TextStyle(color: DesignColor.muted, fontSize: 10)),
-      ]),
-    );
-  }
-}
-
-class _AddDocCard extends StatelessWidget {
+class _BarBtn extends StatelessWidget {
+  final IconData icon;
+  final Color color;
   final VoidCallback onTap;
-  const _AddDocCard({required this.onTap});
+  const _BarBtn({required this.icon, required this.color, required this.onTap});
 
   @override
   Widget build(BuildContext context) => GestureDetector(
     onTap: onTap,
     child: Container(
-      width: 110,
-      margin: const EdgeInsets.only(right: 10, bottom: 4, top: 4),
+      width: 44, height: 44,
       decoration: BoxDecoration(
-        border: Border.all(color: DesignColor.borderH, style: BorderStyle.solid),
-        borderRadius: BorderRadius.circular(14),
-        color: DesignColor.indigoGlow.withOpacity(0.3),
+        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.1)),
+      ),
+      child: Icon(icon, color: color, size: 20),
+    ),
+  );
+}
+
+class _NavBtn extends StatelessWidget {
+  final IconData icon;
+  final bool active;
+  final VoidCallback onTap;
+  const _NavBtn({required this.icon, required this.active, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: Container(
+      width: 38, height: 38,
+      decoration: BoxDecoration(
+        color: active ? AppColors.indigo.withOpacity(0.15) : Theme.of(context).colorScheme.onSurface.withOpacity(0.07),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: active ? AppColors.indigo.withOpacity(0.4) : Colors.transparent),
+      ),
+      child: Icon(icon, size: 18, color: active ? AppColors.indigo : Theme.of(context).colorScheme.onSurface.withOpacity(0.5)),
+    ),
+  );
+}
+
+// ── Docs shelf ────────────────────────────────────────────────────────────────
+class _DocsShelf extends StatelessWidget {
+  final List docs;
+  final bool isIndexing;
+  final double? progress;
+  final String? statusText;
+  final ValueChanged<String> onDelete;
+  final VoidCallback onAdd;
+  const _DocsShelf({required this.docs, required this.isIndexing, this.progress, this.statusText, required this.onDelete, required this.onAdd});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      if (isIndexing)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(statusText ?? 'Indexing…', style: TextStyle(color: cs.onSurface.withOpacity(0.5), fontSize: 11)),
+            const SizedBox(height: 6),
+            ClipRRect(borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(value: progress, color: AppColors.indigo,
+                backgroundColor: AppColors.indigo.withOpacity(0.1), minHeight: 4)),
+            const SizedBox(height: 6),
+          ]),
+        ),
+      SizedBox(
+        height: 130,
+        child: ListView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          children: [
+            ...docs.map((doc) => _DocCard(doc: doc, onDelete: () => onDelete(doc.docId))),
+            _AddCard(onTap: onAdd),
+          ],
+        ),
+      ),
+    ]);
+  }
+}
+
+class _DocCard extends StatelessWidget {
+  final dynamic doc;
+  final VoidCallback onDelete;
+  const _DocCard({required this.doc, required this.onDelete});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = context.isDark;
+    final isPdf = (doc.docType as String).toLowerCase() == 'pdf';
+    final color = isPdf ? AppColors.rose : AppColors.cyan;
+    return Container(
+      width: 140,
+      margin: const EdgeInsets.only(right: 10, top: 8, bottom: 8),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.cardBg(context),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border(context)),
+        boxShadow: isDark ? [] : [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8)],
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          Container(padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(color: color.withOpacity(0.12), borderRadius: BorderRadius.circular(8)),
+            child: Icon(isPdf ? Icons.picture_as_pdf_rounded : Icons.description_rounded, size: 16, color: color)),
+          GestureDetector(
+            onTap: onDelete,
+            child: Icon(Icons.close_rounded, size: 14, color: cs.onSurface.withOpacity(0.35))),
+        ]),
+        const SizedBox(height: 8),
+        Text(doc.docTitle as String, style: TextStyle(
+          color: cs.onSurface, fontSize: 12, fontWeight: FontWeight.w600),
+          maxLines: 2, overflow: TextOverflow.ellipsis),
+        const Spacer(),
+        Text('${doc.chunks} chunks', style: TextStyle(
+          color: cs.onSurface.withOpacity(0.35), fontSize: 10)),
+      ]),
+    );
+  }
+}
+
+class _AddCard extends StatelessWidget {
+  final VoidCallback onTap;
+  const _AddCard({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: Container(
+      width: 110, margin: const EdgeInsets.only(right: 10, top: 8, bottom: 8),
+      decoration: BoxDecoration(
+        color: AppColors.indigo.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.indigo.withOpacity(0.25), style: BorderStyle.solid),
       ),
       child: const Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-        Icon(Icons.add_rounded, color: DesignColor.indigo, size: 28),
+        Icon(Icons.add_circle_outline_rounded, color: AppColors.indigo, size: 28),
         SizedBox(height: 6),
         Text('Add PDF\nor Note', textAlign: TextAlign.center,
-          style: TextStyle(color: DesignColor.indigo, fontSize: 11, fontWeight: FontWeight.w600)),
+          style: TextStyle(color: AppColors.indigo, fontSize: 11, fontWeight: FontWeight.w600)),
       ]),
     ),
   );
 }
 
-// ── Empty state ───────────────────────────────────────────────────────────────
+class _EmptyDocsBar extends StatelessWidget {
+  final VoidCallback onUpload;
+  const _EmptyDocsBar({required this.onUpload});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      height: 60,
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: GestureDetector(
+        onTap: onUpload,
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppColors.indigo.withOpacity(0.08),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.indigo.withOpacity(0.25)),
+          ),
+          child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Icon(Icons.upload_file_outlined, color: AppColors.indigo, size: 20),
+            SizedBox(width: 10),
+            Text('Upload your first PDF or note', style: TextStyle(
+              color: AppColors.indigo, fontWeight: FontWeight.w600, fontSize: 13)),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
 class _EmptyState extends StatelessWidget {
   final VoidCallback onUpload;
   const _EmptyState({required this.onUpload});
 
   @override
-  Widget build(BuildContext context) => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(32),
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Center(child: Padding(
+      padding: const EdgeInsets.all(40),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         Container(
-          padding: const EdgeInsets.all(24),
-          decoration: const BoxDecoration(
-            shape: BoxShape.circle, color: DesignColor.indigoGlow),
-          child: const Icon(Icons.auto_stories_outlined, size: 44, color: DesignColor.indigo),
+          padding: const EdgeInsets.all(28),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: LinearGradient(colors: [AppColors.indigo.withOpacity(0.2), AppColors.violet.withOpacity(0.1)]),
+          ),
+          child: const Icon(Icons.auto_stories_rounded, size: 52, color: AppColors.indigo),
         ),
-        const SizedBox(height: 20),
-        const Text('No Documents Yet', style: TextStyle(
-          color: DesignColor.text, fontWeight: FontWeight.w800,
-          fontSize: 18, fontFamily: 'Syne')),
-        const SizedBox(height: 8),
-        const Text(
-          'Upload your textbook PDFs and notes. '
-          'Lumina will index them locally so you can ask questions '
-          'even without internet.',
-          textAlign: TextAlign.center,
-          style: TextStyle(color: DesignColor.sub, fontSize: 13, height: 1.5)),
         const SizedBox(height: 24),
+        Text('Your Second Brain', style: TextStyle(
+          fontFamily: 'Syne', fontWeight: FontWeight.w800, fontSize: 22, color: cs.onSurface)),
+        const SizedBox(height: 10),
+        Text('Upload textbook PDFs and notes. Lumina indexes them locally — then you can ask anything, even offline.',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: cs.onSurface.withOpacity(0.5), fontSize: 13, height: 1.6)),
+        const SizedBox(height: 28),
         GestureDetector(
           onTap: onUpload,
           child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 14),
+            width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 16),
             decoration: DesignStyles.gradientButton(),
             child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              Icon(Icons.upload_file_outlined, color: Colors.white),
+              Icon(Icons.upload_file_outlined, color: Colors.white, size: 20),
               SizedBox(width: 10),
-              Text('Upload PDF or Notes',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
+              Text('Upload PDF or Notes', style: TextStyle(
+                color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
             ]),
           ),
         ),
       ]),
-    ),
-  );
-}
-
-// ── Ambient glow orb ──────────────────────────────────────────────────────────
-class _GlowOrb extends StatelessWidget {
-  final Color color;
-  final double size, opacity;
-  const _GlowOrb({required this.color, required this.size, required this.opacity});
-
-  @override
-  Widget build(BuildContext context) => Container(
-    width: size, height: size,
-    decoration: BoxDecoration(
-      shape: BoxShape.circle,
-      gradient: RadialGradient(colors: [color.withOpacity(opacity), Colors.transparent]),
-    ),
-  );
+    ));
+  }
 }

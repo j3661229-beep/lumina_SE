@@ -14,7 +14,7 @@ class BunkAnalyticsScreen extends ConsumerWidget {
     final analyticsAsync = ref.watch(bunkAnalyticsProvider);
 
     return Scaffold(
-      backgroundColor: DesignColor.bg,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Stack(children: [
         // Ambient glow
         Positioned(
@@ -24,7 +24,7 @@ class BunkAnalyticsScreen extends ConsumerWidget {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               gradient: RadialGradient(colors: [
-                DesignColor.indigo.withOpacity(0.15), Colors.transparent,
+                AppColors.indigo.withOpacity(context.isDark ? 0.15 : 0.08), Colors.transparent,
               ]),
             ),
           ),
@@ -42,19 +42,19 @@ class BunkAnalyticsScreen extends ConsumerWidget {
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                       decoration: BoxDecoration(
-                        color: DesignColor.s1,
+                        color: AppColors.cardBg(context),
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: DesignColor.border),
+                        border: Border.all(color: AppColors.border(context)),
                       ),
-                      child: const Row(children: [
-                        Icon(Icons.arrow_back_ios_new_rounded, size: 13, color: DesignColor.text),
-                        SizedBox(width: 6),
-                        Text('Back', style: TextStyle(color: DesignColor.text, fontSize: 13, fontWeight: FontWeight.w600)),
+                      child: Row(children: [
+                        Icon(Icons.arrow_back_ios_new_rounded, size: 13, color: Theme.of(context).colorScheme.onSurface),
+                        const SizedBox(width: 6),
+                        Text('Back', style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 13, fontWeight: FontWeight.w600)),
                       ]),
                     ),
                   ),
-                  const Text('Bunk Analytics',
-                    style: TextStyle(color: DesignColor.text, fontSize: 20, fontWeight: FontWeight.w800, fontFamily: 'Syne')),
+                  Text('Bunk Analytics',
+                    style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 20, fontWeight: FontWeight.w800, fontFamily: 'Syne')),
                   const SizedBox(width: 70),
                 ],
               ),
@@ -64,21 +64,24 @@ class BunkAnalyticsScreen extends ConsumerWidget {
               child: analyticsAsync.when(
                 loading: () => const CardListShimmer(count: 6, cardHeight: 80),
                 error: (e, _) => Center(
-                  child: Text('Error: $e', style: const TextStyle(color: DesignColor.rose))),
+                  child: Text('Error: $e', style: const TextStyle(color: AppColors.rose))),
                 data: (data) {
                   if (data.isEmpty) {
                     return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
                       Container(
                         padding: const EdgeInsets.all(24),
-                        decoration: const BoxDecoration(color: DesignColor.indigoGlow, shape: BoxShape.circle),
-                        child: const Icon(Icons.school_outlined, size: 48, color: DesignColor.indigo),
+                        decoration: BoxDecoration(
+                          color: AppColors.indigo.withOpacity(context.isDark ? 0.15 : 0.08), 
+                          shape: BoxShape.circle
+                        ),
+                        child: const Icon(Icons.school_outlined, size: 48, color: AppColors.indigo),
                       ),
                       const SizedBox(height: 16),
-                      const Text('No attendance data yet',
-                        style: TextStyle(color: DesignColor.text, fontWeight: FontWeight.w700, fontSize: 16, fontFamily: 'Syne')),
+                      Text('No attendance data yet',
+                        style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontWeight: FontWeight.w700, fontSize: 16, fontFamily: 'Syne')),
                       const SizedBox(height: 6),
-                      const Text('Mark your first attendance to see analytics',
-                        style: TextStyle(color: DesignColor.sub, fontSize: 13)),
+                      Text('Mark your first attendance to see analytics',
+                        style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5), fontSize: 13)),
                     ]));
                   }
 
@@ -97,16 +100,16 @@ class BunkAnalyticsScreen extends ConsumerWidget {
                         margin: const EdgeInsets.only(bottom: 16),
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
-                            colors: [DesignColor.indigo.withOpacity(0.15), DesignColor.violet.withOpacity(0.08)],
+                            colors: [AppColors.indigo.withOpacity(0.15), AppColors.violet.withOpacity(0.08)],
                             begin: Alignment.topLeft, end: Alignment.bottomRight,
                           ),
                           borderRadius: BorderRadius.circular(18),
-                          border: Border.all(color: DesignColor.borderH),
+                          border: Border.all(color: AppColors.border(context)),
                         ),
                         child: Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
-                          _SummaryItem(label: 'Overall', value: '${avgPct.toStringAsFixed(1)}%', color: DesignColor.green),
-                          _SummaryItem(label: 'Safe Subjects', value: '$safeCount/${items.length}', color: DesignColor.amber),
-                          _SummaryItem(label: 'Bunks Left', value: '$totalBunks', color: DesignColor.indigo),
+                          _SummaryItem(label: 'Overall', value: '${avgPct.toStringAsFixed(1)}%', color: AppColors.green),
+                          _SummaryItem(label: 'Safe Subjects', value: '$safeCount/${items.length}', color: AppColors.amber),
+                          _SummaryItem(label: 'Bunks Left', value: '$totalBunks', color: AppColors.indigo),
                         ]),
                       ),
 
@@ -117,15 +120,18 @@ class BunkAnalyticsScreen extends ConsumerWidget {
                         final total = (item['total_held'] as num?)?.toInt() ?? 0;
                         final bunksLeft = (item['bunks_remaining'] as num?)?.toInt() ?? 0;
                         final safe = pct >= 75.0;
-                        final statusColor = safe ? DesignColor.green : DesignColor.rose;
+                        final statusColor = safe ? AppColors.green : AppColors.rose;
 
                         return Container(
                           margin: const EdgeInsets.only(bottom: 12),
                           padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
-                            color: DesignColor.s1,
+                            color: AppColors.cardBg(context),
                             borderRadius: BorderRadius.circular(16),
                             border: Border(left: BorderSide(color: statusColor, width: 3)),
+                            boxShadow: context.isDark ? [] : [
+                              BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8, offset: const Offset(0, 2))
+                            ],
                           ),
                           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                             Row(
@@ -133,7 +139,7 @@ class BunkAnalyticsScreen extends ConsumerWidget {
                               children: [
                                 Expanded(
                                   child: Text(item['subject_name'] ?? '',
-                                    style: const TextStyle(color: DesignColor.text, fontWeight: FontWeight.w700, fontSize: 14, fontFamily: 'Syne')),
+                                    style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontWeight: FontWeight.w700, fontSize: 14, fontFamily: 'Syne')),
                                 ),
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -153,7 +159,7 @@ class BunkAnalyticsScreen extends ConsumerWidget {
                               Container(
                                 height: 6,
                                 decoration: BoxDecoration(
-                                  color: DesignColor.s2,
+                                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.08),
                                   borderRadius: BorderRadius.circular(3),
                                 ),
                               ),
@@ -170,10 +176,10 @@ class BunkAnalyticsScreen extends ConsumerWidget {
                             ]),
                             const SizedBox(height: 10),
                             Row(children: [
-                              const Icon(Icons.check_circle_outline_rounded, size: 13, color: DesignColor.sub),
+                              Icon(Icons.check_circle_outline_rounded, size: 13, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4)),
                               const SizedBox(width: 5),
                               Text('Attended: $attended/$total',
-                                style: const TextStyle(color: DesignColor.sub, fontSize: 11)),
+                                style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4), fontSize: 11)),
                               const Spacer(),
                               Text(
                                 safe
@@ -206,6 +212,6 @@ class _SummaryItem extends StatelessWidget {
   Widget build(BuildContext context) => Column(children: [
     Text(value, style: TextStyle(color: color, fontSize: 22, fontWeight: FontWeight.w800, fontFamily: 'Syne')),
     const SizedBox(height: 4),
-    Text(label, style: const TextStyle(color: DesignColor.muted, fontSize: 10, fontWeight: FontWeight.w600)),
+    Text(label, style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4), fontSize: 10, fontWeight: FontWeight.w600)),
   ]);
 }

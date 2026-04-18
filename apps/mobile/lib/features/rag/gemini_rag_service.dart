@@ -1,10 +1,8 @@
-import 'dart:convert';
 import 'package:dio/dio.dart';
-import 'package:connectivity_plus/connectivity_plus.dart';
+import '../../core/network/api_client.dart';
 
-/// Handles all Gemini API calls for the RAG pipeline:
-/// - text-embedding-004 for generating 768-dim vectors
-/// - gemini-1.5-flash for synthesising answers from retrieved chunks
+/// Handles RAG pipeline using the Local Offline Node AI server over ApiClient
+/// Falls back to Gemini strictly if Local processing fails.
 class GeminiRagService {
   static const _apiKey = String.fromEnvironment('GEMINI_API_KEY',
       defaultValue: 'ERROR_API_KEY_NOT_CONFIGURED');
@@ -22,93 +20,95 @@ class GeminiRagService {
   static GeminiRagService get instance => _instance ??= GeminiRagService._();
   GeminiRagService._();
 
-  // ── Check connectivity ────────────────────────────────────────────────────
-  Future<bool> isOnline() async {
-    // Forcing completely offline operations for now, as requested.
-    // To restore API usage, uncomment below:
-    // final result = await Connectivity().checkConnectivity();
-    // return result.isNotEmpty && result.first != ConnectivityResult.none;
-    return false;
+  Future<bool> isOnline() async => true; // Dummy for rag_provider compatibility
+
+  // ── Embed Text ──────────────────────────────────────────────────────────
+  Future<List<double>?> embed(String text) async {
+    try {
+      // 1. Try fully local, offline inference first
+      final res = await ApiClient.instance.post('/rag/embed', data: {'text': text});
+      final arr = res['embedding'] as List<dynamic>;
+      return arr.map((e) => (e as num).toDouble()).toList();
+    } catch (e) {
+      // 2. Fallback to Gemini if backend AI is unavailable
+      print('[LocalRAG] Embed failed, falling back to Gemini: $e');
+      return _embedGemini(text, isQuery: false);
+    }
   }
 
-  // ── Generate 768-dim embedding for a text chunk ───────────────────────────
-  Future<List<double>?> embed(String text) async {
-    if (!await isOnline()) return null;
+  Future<List<double>?> embedQuery(String query) async {
+    try {
+      // 1. Try fully local, offline inference
+      final res = await ApiClient.instance.post('/rag/embed', data: {'text': query});
+      final arr = res['embedding'] as List<dynamic>;
+      return arr.map((e) => (e as num).toDouble()).toList();
+    } catch (e) {
+      print('[LocalRAG] Query Embed failed, falling back to Gemini: $e');
+      return _embedGemini(query, isQuery: true);
+    }
+  }
+
+  Future<List<double>?> _embedGemini(String text, {required bool isQuery}) async {
     try {
       final res = await _dio.post(
         '$_embedUrl?key=$_apiKey',
         options: Options(headers: {'Content-Type': 'application/json'}),
-        data: jsonEncode({
+        data: {
           'model': 'models/text-embedding-004',
           'content': {'parts': [{'text': text}]},
-          'taskType': 'RETRIEVAL_DOCUMENT',
-        }),
+          'taskType': isQuery ? 'RETRIEVAL_QUERY' : 'RETRIEVAL_DOCUMENT',
+        },
       );
-      final values = (res.data['embedding']['values'] as List)
+      return (res.data['embedding']['values'] as List)
           .map<double>((v) => (v as num).toDouble())
           .toList();
-      return values;
-    } catch (e) {
-      return null;
+    } catch (_) {
+      return List.filled(384, 0.0); // Return dummy offline embeddings
     }
   }
 
-  // ── Generate embedding for a user query ───────────────────────────────────
-  Future<List<double>?> embedQuery(String query) async {
-    if (!await isOnline()) return null;
-    try {
-      final res = await _dio.post(
-        '$_embedUrl?key=$_apiKey',
-        options: Options(headers: {'Content-Type': 'application/json'}),
-        data: jsonEncode({
-          'model': 'models/text-embedding-004',
-          'content': {'parts': [{'text': query}]},
-          'taskType': 'RETRIEVAL_QUERY',
-        }),
-      );
-      final values = (res.data['embedding']['values'] as List)
-          .map<double>((v) => (v as num).toDouble())
-          .toList();
-      return values;
-    } catch (e) {
-      return null;
-    }
-  }
-
-  // ── Synthesise an answer from retrieved context chunks ────────────────────
+  // ── Synthesise Chat ─────────────────────────────────────────────────────
   Future<String> synthesise(String query, List<String> chunks) async {
-    if (!await isOnline()) {
-      final context = chunks.asMap().entries.map((e) => '> ${e.value.replaceAll('\n', '\n> ')}').join('\n\n');
-      return '*(Offline Mode)* Here are the most relevant excerpts from your documents:\n\n$context';
+    try {
+      // 1. Try full offline generation (Xenova / TinyLlama)
+      final res = await ApiClient.instance.post('/rag/chat', data: {
+        'query': query,
+        'chunks': chunks
+      });
+      final answer = res['text'] as String?;
+      if (answer != null && answer.isNotEmpty) return answer;
+      throw Exception("Empty response");
+    } catch (e) {
+      print('[LocalRAG] Chat failed, falling back to Gemini: $e');
+      // 2. Fallback to Gemini
+      return _synthesiseGemini(query, chunks);
     }
+  }
+
+  Future<String> _synthesiseGemini(String query, List<String> chunks) async {
     final context = chunks.asMap().entries.map((e) => '[${e.key + 1}] ${e.value}').join('\n\n');
     try {
       final res = await _dio.post(
         '$_chatUrl?key=$_apiKey',
         options: Options(headers: {'Content-Type': 'application/json'}),
-        data: jsonEncode({
+        data: {
           'contents': [{
             'role': 'user',
             'parts': [{
-              'text': '''You are a helpful study assistant. Answer the student's question based ONLY on the provided textbook/note excerpts. Be concise and clear. If the answer is not in the excerpts, say so.
-
-STUDENT QUESTION: $query
-
-RETRIEVED EXCERPTS:
+              'text': '''You are a proactive engineering sidekick. Answer the question using ONLY the provided excerpts.
+QUESTION: $query
+EXCERPTS:
 $context
-
 ANSWER:'''
             }]
           }],
           'generationConfig': {'temperature': 0.1, 'maxOutputTokens': 512},
-        }),
+        },
       );
       return res.data['candidates'][0]['content']['parts'][0]['text'] as String;
     } catch (e) {
-      // If the API crashes (e.g. 404, rate limit), fallback gracefully to local chunks
-      // instead of showing ugly DioExceptions to the user.
-      final fallbackContext = chunks.asMap().entries.map((e) => '> ${e.value.replaceAll('\n', '\n> ')}').join('\n\n');
-      return '*(Offline / Fallback)* We could not reach Lumina AI at the moment. Here are the most relevant excerpts from your notes:\n\n$fallbackContext';
+      final fallbackContext = chunks.map((c) => '> ${c.replaceAll('\n', '\n> ')}').join('\n\n');
+      return '*(Offline Mode)* Here are the most relevant excerpts from your notes:\n\n$fallbackContext';
     }
   }
 }

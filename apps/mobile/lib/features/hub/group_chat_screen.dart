@@ -245,7 +245,7 @@ class _GroupChatScreenState extends ConsumerState<GroupChatScreen> {
       showModalBottomSheet(
         context: context,
         isScrollControlled: true,
-        backgroundColor: const Color(0xFF0F1228),
+        backgroundColor: AppColors.surface(context),
         builder: (ctx) => StatefulBuilder(builder: (ctx, setInnerState) {
           final members = res['members'] as List;
           return Container(
@@ -256,9 +256,9 @@ class _GroupChatScreenState extends ConsumerState<GroupChatScreen> {
               ...members.map((m) {
                 final isAdmin = m['isCreator'] == true || m['role'] == 'admin';
                 return ListTile(
-                  leading: CircleAvatar(backgroundColor: DesignColor.indigo, child: Text(m['name'][0].toUpperCase(), style: const TextStyle(color: Colors.white))),
-                  title: Text(m['name'], style: const TextStyle(color: Colors.white)),
-                  subtitle: Text(isAdmin ? 'Admin' : 'Member', style: TextStyle(color: isAdmin ? DesignColor.amber : DesignColor.sub)),
+                  leading: CircleAvatar(backgroundColor: AppColors.indigo, child: Text(m['name'][0].toUpperCase(), style: const TextStyle(color: Colors.white))),
+                  title: Text(m['name'], style: TextStyle(color: AppColors.textPrimary(context))),
+                  subtitle: Text(isAdmin ? 'Admin' : 'Member', style: TextStyle(color: isAdmin ? AppColors.amber : AppColors.textSecondary(context))),
                   trailing: (iAmAdmin && !isAdmin && m['id'] != _myId)
                       ? TextButton(
                           onPressed: () async {
@@ -270,7 +270,7 @@ class _GroupChatScreenState extends ConsumerState<GroupChatScreen> {
                               ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
                             }
                           },
-                          child: const Text('Make Admin', style: TextStyle(color: DesignColor.indigo)))
+                          child: const Text('Make Admin', style: TextStyle(color: AppColors.indigo)))
                       : null,
                 );
               }),
@@ -295,9 +295,9 @@ class _GroupChatScreenState extends ConsumerState<GroupChatScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF0F0F1A) : const Color(0xFFF0F2F5),
+      backgroundColor: AppColors.darkBg, // keep dark bg for chat focus
       appBar: AppBar(
-        backgroundColor: isDark ? const Color(0xFF1A1A2E) : cs.surface,
+        backgroundColor: AppColors.surface(context),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.canPop() ? context.pop() : context.go('/groups'),
@@ -428,15 +428,15 @@ class _MessageBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     final isCode = msg['message_type'] == 'code';
     final content = msg['content'] as String? ?? '';
     final lang = (msg['metadata'] as Map?)?['language'] as String? ?? '';
 
     final bubbleColor = isMe
-        ? const Color(0xFF6366F1)
-        : isDark ? const Color(0xFF1E1E2E) : Colors.white;
-    final textColor = isMe ? Colors.white : null;
+        ? AppColors.indigo
+        : isDark ? AppColors.darkSurface : Colors.white;
+    final textColor = isMe ? Colors.white : cs.onSurface;
 
     final timeStr = () {
       try {
@@ -508,7 +508,7 @@ class _MessageBubble extends StatelessWidget {
                           Container(
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF1E1E2E),
+                              color: isDark ? const Color(0xFF1E1E2E) : const Color(0xFF282A36), // code block bg stays dark
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(content,
@@ -557,18 +557,19 @@ class _InputBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(8, 8, 8, 16),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1A1A2E) : cs.surface,
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 8, offset: const Offset(0, -2))],
+        color: isDark ? AppColors.darkSurface : Colors.white,
+        border: Border(top: BorderSide(color: AppColors.border(context))),
+        boxShadow: isDark ? [] : [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, -2))],
       ),
       child: SafeArea(top: false, child: Row(children: [
         // Code button
         IconButton(
-          icon: Icon(Icons.code, color: cs.primary),
+          icon: const Icon(Icons.code, color: AppColors.indigo),
           tooltip: 'Send code snippet',
           onPressed: onCode,
         ),
@@ -576,8 +577,9 @@ class _InputBar extends StatelessWidget {
         Expanded(
           child: Container(
             decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF0F0F1A) : cs.surfaceContainerHighest,
+              color: isDark ? AppColors.darkBg : AppColors.cardBg(context),
               borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: AppColors.border(context)),
             ),
             child: TextField(
               controller: controller,
@@ -602,7 +604,8 @@ class _InputBar extends StatelessWidget {
             : FloatingActionButton.small(
                 heroTag: 'send_msg',
                 onPressed: () => onSend(),
-                backgroundColor: cs.primary,
+                backgroundColor: AppColors.indigo,
+                elevation: 0,
                 child: const Icon(Icons.send, color: Colors.white, size: 18),
               ),
         ),
@@ -638,9 +641,9 @@ class _ActivityPill extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
-              color: const Color(0xFF6366F1).withOpacity(0.12),
+              color: AppColors.indigo.withOpacity(0.12),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: const Color(0xFF6366F1).withOpacity(0.3)),
+              border: Border.all(color: AppColors.indigo.withOpacity(0.3)),
             ),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
               const Text('🎨', style: TextStyle(fontSize: 16)),
@@ -653,10 +656,10 @@ class _ActivityPill extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF6366F1),
+                  color: AppColors.indigo,
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Text('Join Live', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
+                child: const Text('Join Live', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
               ),
             ]),
           ),

@@ -4,6 +4,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import 'expense_provider.dart';
 import 'expense_cats.dart';
+import '../../core/theme/design_tokens.dart';
 
 class WeeklyWrapScreen extends ConsumerWidget {
   const WeeklyWrapScreen({super.key});
@@ -17,7 +18,7 @@ class WeeklyWrapScreen extends ConsumerWidget {
     final size      = MediaQuery.sizeOf(context);
 
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF0F1117) : const Color(0xFFF7F8FD),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: wrapAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('$e')),
@@ -55,9 +56,9 @@ class WeeklyWrapScreen extends ConsumerWidget {
           // Budget status
           final weekBudget = ref.watch(budgetProvider);
           final budgetPct  = (weekTotal / weekBudget).clamp(0.0, 1.0);
-          final budgetColor = budgetPct > 0.9 ? const Color(0xFFEF4444)
-              : budgetPct > 0.7 ? const Color(0xFFF59E0B)
-              : const Color(0xFF10B981);
+          final budgetColor = budgetPct > 0.9 ? AppColors.rose
+              : budgetPct > 0.7 ? AppColors.amber
+              : AppColors.green;
 
           // Weekly trend (bar chart data)
           final trendWeeks = weeks.take(5).toList().reversed.toList();
@@ -68,14 +69,14 @@ class WeeklyWrapScreen extends ConsumerWidget {
               SliverAppBar(
                 pinned: true,
                 expandedHeight: size.height > 800 ? 220 : 180,
-                backgroundColor: cs.primary,
+                backgroundColor: isDark ? AppColors.darkBg : AppColors.lightBg,
                 leading: IconButton(
-                  icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white),
+                  icon: Icon(Icons.arrow_back_ios_new_rounded, color: Theme.of(context).colorScheme.onSurface),
                   onPressed: () => Navigator.pop(context),
                 ),
                 actions: [
                   IconButton(
-                    icon: const Icon(Icons.edit_note_rounded, color: Colors.white),
+                    icon: Icon(Icons.edit_note_rounded, color: Theme.of(context).colorScheme.onSurface),
                     tooltip: 'Set Budget',
                     onPressed: () {
                       final ctrl = TextEditingController(text: weekBudget.toStringAsFixed(0));
@@ -106,7 +107,9 @@ class WeeklyWrapScreen extends ConsumerWidget {
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         begin: Alignment.topLeft, end: Alignment.bottomRight,
-                        colors: [cs.primary, cs.secondary],
+                        colors: isDark 
+                          ? [AppColors.indigo.withOpacity(0.35), AppColors.violet.withOpacity(0.1), Colors.transparent]
+                          : [AppColors.indigo.withOpacity(0.15), AppColors.violet.withOpacity(0.05), Colors.transparent],
                       ),
                     ),
                     child: SafeArea(
@@ -126,16 +129,20 @@ class WeeklyWrapScreen extends ConsumerWidget {
                             const SizedBox(height: 12),
                             Row(children: [
                               Text('₹${weekTotal.toStringAsFixed(0)}',
-                                style: const TextStyle(
-                                  color: Colors.white, fontSize: 36,
-                                  fontWeight: FontWeight.w900)),
+                                style: TextStyle(
+                                  color: Theme.of(context).colorScheme.onSurface, fontSize: 36,
+                                  fontWeight: FontWeight.w900, fontFamily: 'Syne')),
                               const SizedBox(width: 12),
-                              Chip(
-                                backgroundColor: budgetColor.withOpacity(0.25),
-                                label: Text(
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: budgetColor.withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
                                   budgetPct > 0.9 ? '🔴 Over budget!' :
                                   budgetPct > 0.7 ? '🟡 Watch it' : '🟢 On track',
-                                  style: TextStyle(color: budgetColor, fontWeight: FontWeight.w700, fontSize: 12),
+                                  style: TextStyle(color: budgetColor, fontWeight: FontWeight.w700, fontSize: 11),
                                 ),
                               ),
                             ]),
@@ -376,16 +383,10 @@ class _Section extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: cs.surface,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(
-          color: Colors.black.withOpacity(0.05),
-          blurRadius: 12, offset: const Offset(0, 4))],
-      ),
+      decoration: AppStyles.glassCard(context),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(title, style: Theme.of(context).textTheme.labelLarge?.copyWith(
-          fontWeight: FontWeight.w800, color: cs.primary)),
+          fontWeight: FontWeight.w800, color: AppColors.indigo)),
         const SizedBox(height: 12),
         child,
       ]),

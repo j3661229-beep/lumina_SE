@@ -104,7 +104,7 @@ class _OcrParserScreenState extends ConsumerState<OcrParserScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: DesignColor.bg,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('Import Timetable',
           style: TextStyle(fontFamily: 'Syne', fontWeight: FontWeight.w800)),
@@ -114,11 +114,11 @@ class _OcrParserScreenState extends ConsumerState<OcrParserScreen> {
           child: Container(
             margin: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: DesignColor.s1,
+              color: AppColors.cardBg(context),
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: DesignColor.border),
+              border: Border.all(color: AppColors.border(context)),
             ),
-            child: const Icon(Icons.arrow_back_ios_new_rounded, size: 14, color: DesignColor.text),
+            child: Icon(Icons.arrow_back_ios_new_rounded, size: 14, color: Theme.of(context).colorScheme.onSurface),
           ),
         ),
       ),
@@ -136,14 +136,14 @@ class _OcrParserScreenState extends ConsumerState<OcrParserScreen> {
                   begin: Alignment.topLeft, end: Alignment.bottomRight,
                 ),
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: DesignColor.borderH),
+                border: Border.all(color: AppColors.border(context)),
               ),
-              child: const Row(children: [
-                Icon(Icons.tips_and_updates_outlined, size: 28, color: DesignColor.indigo),
+              child: Row(children: [
+                const Icon(Icons.tips_and_updates_outlined, size: 28, color: AppColors.indigo),
                 SizedBox(width: 12),
                 Expanded(child: Text(
                   'Take a photo of your timetable or upload a PDF. Gemini AI will auto-extract all slots.',
-                  style: TextStyle(color: DesignColor.sub, fontSize: 13, height: 1.5),
+                  style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6), fontSize: 13, height: 1.5),
                 )),
               ]),
             ),
@@ -163,25 +163,25 @@ class _OcrParserScreenState extends ConsumerState<OcrParserScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            if (_isProcessing) const Center(child: Padding(
-              padding: EdgeInsets.all(24),
+            if (_isProcessing) Center(child: Padding(
+              padding: const EdgeInsets.all(24),
               child: Column(children: [
-                CircularProgressIndicator(color: DesignColor.indigo),
-                SizedBox(height: 14),
-                Text('Gemini is analysing your timetable...', style: TextStyle(color: DesignColor.sub, fontSize: 13)),
+                const CircularProgressIndicator(color: AppColors.indigo),
+                const SizedBox(height: 14),
+                Text('Gemini is analysing your timetable...', style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6), fontSize: 13)),
               ]),
             )),
             if (_parsedSlots.isNotEmpty) ...[
               Row(children: [
                 Text('${_parsedSlots.length} slots found',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontFamily: 'Syne', fontWeight: FontWeight.w700,
-                    color: DesignColor.text, fontSize: 16)),
+                    color: Theme.of(context).colorScheme.onSurface, fontSize: 16)),
                 const Spacer(),
                 TextButton.icon(
                   onPressed: () => setState(() => _parsedSlots = []),
-                  icon: const Icon(Icons.clear, size: 14, color: DesignColor.rose),
-                  label: const Text('Clear', style: TextStyle(color: DesignColor.rose)),
+                  icon: const Icon(Icons.clear, size: 14, color: AppColors.rose),
+                  label: const Text('Clear', style: TextStyle(color: AppColors.rose)),
                 ),
               ]),
               const SizedBox(height: 8),
@@ -196,23 +196,23 @@ class _OcrParserScreenState extends ConsumerState<OcrParserScreen> {
                       background: Container(
                         alignment: Alignment.centerRight,
                         padding: const EdgeInsets.only(right: 16),
-                        color: DesignColor.rose.withOpacity(0.2),
-                        child: const Icon(Icons.delete, color: DesignColor.rose),
+                        color: AppColors.rose.withOpacity(0.1),
+                        child: const Icon(Icons.delete, color: AppColors.rose),
                       ),
                       onDismissed: (_) => setState(() => _parsedSlots.removeAt(i)),
                       child: Container(
                         margin: const EdgeInsets.only(bottom: 6),
-                        decoration: DesignStyles.glassCard(),
+                        decoration: AppStyles.glassCard(context),
                         child: ListTile(
                           leading: CircleAvatar(
-                            backgroundColor: DesignColor.indigoGlow,
+                            backgroundColor: AppColors.indigo.withOpacity(0.15),
                             child: Text(s.dayOfWeek.substring(0, 3).toUpperCase(),
-                              style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: DesignColor.indigo)),
+                              style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: AppColors.indigo)),
                           ),
-                          title: Text(s.subjectName, style: const TextStyle(color: DesignColor.text, fontWeight: FontWeight.w600)),
+                          title: Text(s.subjectName, style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontWeight: FontWeight.w600)),
                           subtitle: Text(
                             '${s.startTime} – ${s.endTime}  •  ${s.slotType}${s.teacher != null ? ' • ${s.teacher}' : ''}',
-                            style: const TextStyle(color: DesignColor.muted, fontSize: 12)),
+                            style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4), fontSize: 12)),
                         ),
                       ),
                     );

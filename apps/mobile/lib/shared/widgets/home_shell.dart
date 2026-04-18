@@ -11,12 +11,12 @@ class HomeShell extends ConsumerWidget {
   const HomeShell({super.key, required this.child});
 
   static const _tabs = [
-    (icon: Icons.calendar_view_week_outlined, activeIcon: Icons.calendar_view_week, label: 'Timetable', path: '/home'),
-    (icon: Icons.people_outline, activeIcon: Icons.people, label: 'Groups', path: '/groups'),
-    (icon: Icons.calendar_month_outlined, activeIcon: Icons.calendar_month, label: 'Calendar', path: '/calendar'),
-    (icon: Icons.wallet_outlined, activeIcon: Icons.wallet, label: 'Expenses', path: '/expenses'),
-    (icon: Icons.psychology_outlined, activeIcon: Icons.psychology, label: 'Flow', path: '/flow'),
-    (icon: Icons.auto_stories_outlined, activeIcon: Icons.auto_stories, label: 'Notes', path: '/rag'),
+    (icon: Icons.home_outlined, activeIcon: Icons.home_rounded, label: 'Home', path: '/dashboard'),
+    (icon: Icons.calendar_today_outlined, activeIcon: Icons.calendar_today_rounded, label: 'Schedule', path: '/home'),
+    (icon: Icons.event_note_outlined, activeIcon: Icons.event_note_rounded, label: 'Calendar', path: '/calendar'),
+    (icon: Icons.people_outline_rounded, activeIcon: Icons.people_rounded, label: 'Groups', path: '/groups'),
+    (icon: Icons.account_balance_wallet_outlined, activeIcon: Icons.account_balance_wallet_rounded, label: 'Finance', path: '/expenses'),
+    (icon: Icons.auto_stories_outlined, activeIcon: Icons.auto_stories_rounded, label: 'Brain', path: '/rag'),
   ];
 
   @override
@@ -25,25 +25,20 @@ class HomeShell extends ConsumerWidget {
     int currentIndex = _tabs.indexWhere((t) => location.startsWith(t.path));
     if (currentIndex < 0) currentIndex = 0;
 
+    final isDark = context.isDark;
+
     return Scaffold(
-      backgroundColor: DesignColor.bg,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Stack(
         children: [
-          // Ambient glow orbs — from lumina_ui.jsx
+          // Subtle ambient glow orbs (toned down in light)
           Positioned(
             top: -120, left: -80,
-            child: _GlowOrb(size: 450, color: DesignColor.indigo, opacity: 0.18, durationSec: 5),
+            child: _GlowOrb(size: 450, color: AppColors.indigo, opacity: isDark ? 0.14 : 0.05, durationSec: 5),
           ),
           Positioned(
             bottom: 60, right: -100,
-            child: _GlowOrb(size: 350, color: DesignColor.cyan, opacity: 0.12, durationSec: 7),
-          ),
-          Positioned(
-            left: -300, right: -300,
-            top: 0, bottom: 0,
-            child: Center(
-              child: _GlowOrb(size: 600, color: DesignColor.violet, opacity: 0.06, durationSec: 9),
-            ),
+            child: _GlowOrb(size: 350, color: AppColors.cyan, opacity: isDark ? 0.09 : 0.04, durationSec: 7),
           ),
           child,
         ],
@@ -60,7 +55,7 @@ class HomeShell extends ConsumerWidget {
   }
 }
 
-// ── Animated breathing glow orb ──────────────────────────────────────────────
+// ── Animated breathing glow orb ─────────────────────────────────────────────────────────
 class _GlowOrb extends StatefulWidget {
   final double size, opacity;
   final Color color;
@@ -93,8 +88,7 @@ class _GlowOrbState extends State<_GlowOrb> with SingleTickerProviderStateMixin 
       builder: (_, __) => Transform.scale(
         scale: _anim.value,
         child: Container(
-          width: widget.size,
-          height: widget.size,
+          width: widget.size, height: widget.size,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             gradient: RadialGradient(colors: [
@@ -107,7 +101,7 @@ class _GlowOrbState extends State<_GlowOrb> with SingleTickerProviderStateMixin 
     );
 }
 
-// ── Lumina custom bottom nav bar ─────────────────────────────────────────────
+// ── Premium bottom navigation bar ──────────────────────────────────────────────────
 class _LuminaBottomNav extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;
@@ -121,15 +115,26 @@ class _LuminaBottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = context.isDark;
+    final navBg = isDark ? AppColors.darkSurface : Colors.white;
+    final navBorder = isDark ? AppColors.darkBorder : AppColors.lightBorder;
+
     return Container(
       decoration: BoxDecoration(
-        color: DesignColor.overlay,
-        border: const Border(top: BorderSide(color: DesignColor.border)),
+        color: navBg,
+        border: Border(top: BorderSide(color: navBorder, width: 0.5)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(isDark ? 0.25 : 0.07),
+            blurRadius: 24,
+            offset: const Offset(0, -6),
+          ),
+        ],
       ),
       child: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           child: Row(
             children: List.generate(tabs.length, (i) {
               final sel = currentIndex == i;
@@ -137,39 +142,38 @@ class _LuminaBottomNav extends StatelessWidget {
                 child: GestureDetector(
                   onTap: () => onTap(i),
                   behavior: HitTestBehavior.opaque,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 220),
+                    curve: Curves.easeOutCubic,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
                     child: Column(mainAxisSize: MainAxisSize.min, children: [
-                      Stack(alignment: Alignment.center, children: [
-                        // Glow halo
-                        AnimatedContainer(
-                          duration: const Duration(milliseconds: 250),
-                          curve: Curves.easeOut,
-                          width: sel ? 38 : 0,
-                          height: sel ? 38 : 0,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: sel ? DesignColor.indigoGlow : Colors.transparent,
-                          ),
+                      // Icon with animated pill background
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 220),
+                        curve: Curves.easeOutCubic,
+                        padding: EdgeInsets.symmetric(horizontal: sel ? 12 : 6, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: sel ? AppColors.indigo.withOpacity(0.15) : Colors.transparent,
+                          borderRadius: BorderRadius.circular(20),
                         ),
-                        // Icon
-                        AnimatedScale(
-                          scale: sel ? 1.15 : 1.0,
+                        child: AnimatedScale(
+                          scale: sel ? 1.1 : 1.0,
                           duration: const Duration(milliseconds: 200),
                           child: Icon(
                             sel ? tabs[i].activeIcon : tabs[i].icon,
-                            size: 21,
-                            color: sel ? DesignColor.indigo : DesignColor.muted,
+                            size: 22,
+                            color: sel ? AppColors.indigo : (isDark ? Colors.white.withOpacity(0.4) : const Color(0xFF94A3B8)),
                           ),
                         ),
-                      ]),
-                      const SizedBox(height: 4),
+                      ),
+                      const SizedBox(height: 3),
                       AnimatedDefaultTextStyle(
                         duration: const Duration(milliseconds: 200),
                         style: TextStyle(
-                          fontSize: 9.5,
+                          fontSize: sel ? 9.5 : 9.0,
                           fontWeight: sel ? FontWeight.w700 : FontWeight.w500,
-                          color: sel ? DesignColor.indigo : DesignColor.muted,
+                          color: sel ? AppColors.indigo : (isDark ? const Color(0xFF475569) : const Color(0xFF94A3B8)),
+                          fontFamily: 'DMSans',
                         ),
                         child: Text(tabs[i].label),
                       ),
@@ -194,122 +198,131 @@ class GroupsScreen extends ConsumerStatefulWidget {
   ConsumerState<GroupsScreen> createState() => _GroupsScreenState();
 }
 
-// Group categories definition
 const _kGroupCategories = [
-  (id: 'general',     label: 'General',     icon: Icons.people_outline,           color: Color(0xFF94A3B8)),
-  (id: 'study_focus', label: 'Study Focus', icon: Icons.menu_book_outlined,        color: Color(0xFF6366F1)),
-  (id: 'hackathon',   label: 'Hackathon',   icon: Icons.rocket_launch_outlined,    color: Color(0xFFF59E0B)),
-  (id: 'project',     label: 'Project',     icon: Icons.build_circle_outlined,     color: Color(0xFF10B981)),
-  (id: 'lab',         label: 'Lab / Prac',  icon: Icons.science_outlined,          color: Color(0xFF22D3EE)),
-  (id: 'social',      label: 'Social',      icon: Icons.celebration_outlined,      color: Color(0xFFF43F5E)),
+  (id: 'general',     label: 'General',     icon: Icons.people_outline,        color: Color(0xFF94A3B8)),
+  (id: 'study_focus', label: 'Study',       icon: Icons.menu_book_outlined,    color: Color(0xFF6366F1)),
+  (id: 'hackathon',   label: 'Hackathon',   icon: Icons.rocket_launch_outlined, color: Color(0xFFF59E0B)),
+  (id: 'project',     label: 'Project',     icon: Icons.build_circle_outlined,  color: Color(0xFF10B981)),
+  (id: 'lab',         label: 'Lab / Prac',  icon: Icons.science_outlined,       color: Color(0xFF22D3EE)),
+  (id: 'social',      label: 'Social',      icon: Icons.celebration_outlined,   color: Color(0xFFF43F5E)),
 ];
 
 class _GroupsScreenState extends ConsumerState<GroupsScreen> {
-  String _categoryFilter = 'all'; // 'all' or a category id
+  String _categoryFilter = 'all';
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = context.isDark;
     final groupsAsync = ref.watch(groupsProvider);
     final hubState = ref.watch(hubProvider);
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        title: const Text('Study Squads'),
-        actions: [
-          if (hubState.isLoading)
-            const Padding(
-              padding: EdgeInsets.only(right: 16),
-              child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: DesignColor.indigo)),
-            ),
-          // My Tasks shortcut
-          IconButton(
-            icon: const Icon(Icons.checklist_rtl_outlined, color: DesignColor.sub),
-            tooltip: 'My Tasks',
-            onPressed: () => context.push('/my-tasks'),
+      body: NestedScrollView(
+        headerSliverBuilder: (ctx, _) => [
+          SliverAppBar(
+            pinned: false,
+            backgroundColor: isDark ? AppColors.darkBg : AppColors.lightBg,
+            title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Study Squads', style: TextStyle(
+                fontFamily: 'Syne', fontWeight: FontWeight.w800, fontSize: 22,
+                color: cs.onSurface)),
+              Text('Collaborate with your class', style: TextStyle(
+                color: cs.onSurface.withOpacity(0.45), fontSize: 11, fontFamily: 'DM Sans')),
+            ]),
+            actions: [
+              if (hubState.isLoading)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: SizedBox(width: 18, height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.indigo)),
+                ),
+              _AppBarBtn(icon: Icons.checklist_rtl_outlined,
+                onTap: () => context.push('/my-tasks')),
+              const SizedBox(width: 8),
+              _AppBarBtn(icon: Icons.refresh_rounded,
+                onTap: () => ref.invalidate(groupsProvider)),
+              const SizedBox(width: 12),
+            ],
           ),
-          IconButton(
-            icon: const Icon(Icons.refresh_outlined, color: DesignColor.sub),
-            onPressed: () => ref.invalidate(groupsProvider),
+          // Category filters
+          SliverToBoxAdapter(
+            child: Container(
+              color: isDark ? AppColors.darkBg : AppColors.lightBg,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
+                child: Row(children: [
+                  _FilterChip(
+                    label: 'All', icon: Icons.grid_view_rounded,
+                    color: AppColors.indigo,
+                    selected: _categoryFilter == 'all',
+                    onTap: () => setState(() => _categoryFilter = 'all'),
+                  ),
+                  const SizedBox(width: 8),
+                  ..._kGroupCategories.map((cat) => Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: _FilterChip(
+                      label: cat.label, icon: cat.icon, color: cat.color,
+                      selected: _categoryFilter == cat.id,
+                      onTap: () => setState(() =>
+                        _categoryFilter = cat.id == _categoryFilter ? 'all' : cat.id),
+                    ),
+                  )),
+                ]),
+              ),
+            ),
           ),
         ],
-      ),
-      body: Column(children: [
-        // ── Category filter chips ────────────────────────────────────────
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-          child: Row(children: [
-            _FilterChip(
-              label: 'All',
-              icon: Icons.grid_view_outlined,
-              color: DesignColor.indigo,
-              selected: _categoryFilter == 'all',
-              onTap: () => setState(() => _categoryFilter = 'all'),
-            ),
-            const SizedBox(width: 8),
-            ..._kGroupCategories.map((cat) => Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: _FilterChip(
-                label: cat.label,
-                icon: cat.icon,
-                color: cat.color,
-                selected: _categoryFilter == cat.id,
-                onTap: () => setState(() => _categoryFilter = cat.id == _categoryFilter ? 'all' : cat.id),
-              ),
-            )),
-          ]),
-        ),
-        // ── Groups list ─────────────────────────────────────────────────
-        Expanded(child: groupsAsync.when(
+        body: groupsAsync.when(
           loading: () => const GroupsShimmer(),
-          error: (e, _) => _ErrorState(message: e.toString(), onRetry: () => ref.invalidate(groupsProvider)),
+          error: (e, _) => _ErrorState(
+            message: e.toString(),
+            onRetry: () => ref.invalidate(groupsProvider),
+          ),
           data: (groups) {
-            // Filter by category
             final filtered = _categoryFilter == 'all'
                 ? groups
-                : groups.where((g) {
-                    final cat = (g as Map<String, dynamic>)['category'] as String? ?? 'general';
-                    return cat == _categoryFilter;
-                  }).toList();
+                : groups.where((g) =>
+                    (g as Map<String, dynamic>)['category'] == _categoryFilter).toList();
 
             if (groups.isEmpty) return _EmptyState(
               onCreate: () => _showCreateSheet(context),
               onJoin: () => _showJoinSheet(context),
             );
-            if (filtered.isEmpty) return Center(
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                const Icon(Icons.filter_list_off_outlined, size: 48, color: DesignColor.muted),
+            if (filtered.isEmpty) return Center(child: Column(
+              mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.filter_list_off_outlined, size: 48,
+                  color: cs.onSurface.withOpacity(0.25)),
                 const SizedBox(height: 12),
                 Text('No squads in this category',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(color: DesignColor.sub)),
+                  style: TextStyle(color: cs.onSurface.withOpacity(0.5))),
               ]),
             );
+
             return RefreshIndicator(
-              color: DesignColor.indigo,
-              backgroundColor: DesignColor.s1,
+              color: AppColors.indigo,
+              backgroundColor: isDark ? AppColors.darkSurface : Colors.white,
               onRefresh: () async => ref.invalidate(groupsProvider),
               child: ListView.separated(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
                 itemCount: filtered.length,
                 separatorBuilder: (_, __) => const SizedBox(height: 10),
-                itemBuilder: (ctx, i) {
-                  final g = filtered[i] as Map<String, dynamic>;
-                  return _GroupCard(group: g);
-                },
+                itemBuilder: (_, i) =>
+                  _GroupCard(group: filtered[i] as Map<String, dynamic>),
               ),
             );
           },
-        )),
-      ]),
+        ),
+      ),
       floatingActionButton: Column(mainAxisSize: MainAxisSize.min, children: [
         FloatingActionButton.small(
           heroTag: 'join_fab',
           onPressed: () => _showJoinSheet(context),
-          tooltip: 'Join via code',
-          backgroundColor: DesignColor.s2,
-          foregroundColor: DesignColor.sub,
+          backgroundColor: isDark ? AppColors.darkSurface : Colors.white,
+          foregroundColor: AppColors.indigo,
+          elevation: 4,
           child: const Icon(Icons.qr_code_scanner_outlined),
         ),
         const SizedBox(height: 10),
@@ -321,7 +334,8 @@ class _GroupsScreenState extends ConsumerState<GroupsScreen> {
             backgroundColor: Colors.transparent,
             elevation: 0,
             icon: const Icon(Icons.group_add_outlined, color: Colors.white),
-            label: const Text('New Squad', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+            label: const Text('New Squad',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
           ),
         ),
       ]),
@@ -337,269 +351,297 @@ class _GroupsScreenState extends ConsumerState<GroupsScreen> {
       context: ctx,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (sheetCtx) => StatefulBuilder(builder: (sheetCtx2, setSheet) => Container(
-        decoration: const BoxDecoration(
-          color: Color(0xFF0F1228),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-          border: Border(top: BorderSide(color: DesignColor.borderH)),
-        ),
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(sheetCtx2).viewInsets.bottom + 20,
-          left: 20, right: 20, top: 20,
-        ),
-        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(color: DesignColor.indigoGlow, borderRadius: BorderRadius.circular(12)),
-              child: const Icon(Icons.group_add_outlined, color: DesignColor.indigo),
-            ),
-            const SizedBox(width: 12),
-            Text('Create Study Squad', style: Theme.of(ctx).textTheme.titleLarge),
-          ]),
-          const SizedBox(height: 20),
-          _DarkTextField(controller: nameCtrl, label: 'Squad name *', hint: 'e.g. OS Study Group', icon: Icons.people_outline),
-          const SizedBox(height: 12),
-          _DarkTextField(controller: descCtrl, label: 'Description (optional)', icon: Icons.notes_outlined),
-          const SizedBox(height: 16),
-          // ── Category picker ──────────────────────────────────────────
-          const Text('Category', style: TextStyle(color: DesignColor.sub, fontSize: 12, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 8),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(children: _kGroupCategories.map((cat) {
-              final sel = selectedCategory == cat.id;
-              return GestureDetector(
-                onTap: () => setSheet(() => selectedCategory = cat.id),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  margin: const EdgeInsets.only(right: 8),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                  decoration: BoxDecoration(
-                    color: sel ? cat.color.withOpacity(0.2) : DesignColor.s1,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: sel ? cat.color : DesignColor.border, width: sel ? 1.5 : 1),
-                  ),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(cat.icon, size: 13, color: sel ? cat.color : DesignColor.muted),
-                    const SizedBox(width: 5),
-                    Text(cat.label, style: TextStyle(
-                      fontSize: 12, fontWeight: sel ? FontWeight.w700 : FontWeight.w500,
-                      color: sel ? cat.color : DesignColor.sub,
-                    )),
-                  ]),
-                ),
-              );
-            }).toList()),
+      builder: (sheetCtx) => StatefulBuilder(builder: (sheetCtx2, setSheet) {
+        final cs = Theme.of(sheetCtx2).colorScheme;
+        final isDark = sheetCtx2.isDark;
+        return Container(
+          decoration: BoxDecoration(
+            color: cs.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 40)],
           ),
-          const SizedBox(height: 20),
-          SizedBox(
-            width: double.infinity,
-            child: Container(
-              decoration: DesignStyles.gradientButton(),
-              child: FilledButton.icon(
-                onPressed: () async {
-                  final name = nameCtrl.text.trim();
-                  if (name.isEmpty) return;
-                  Navigator.pop(sheetCtx2);
-                  await ref.read(hubProvider.notifier).createGroup(
-                    name,
-                    descCtrl.text.trim().isEmpty ? null : descCtrl.text.trim(),
-                    category: selectedCategory,
-                  );
-                  ref.invalidate(groupsProvider);
-                  if (mounted) {
-                    final err = ref.read(hubProvider).error;
-                    if (err != null && ctx.mounted) {
-                      ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('Error: $err'), backgroundColor: DesignColor.rose));
-                    } else if (ctx.mounted) {
-                      ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Squad created! ✅')));
-                    }
-                  }
-                },
-                style: FilledButton.styleFrom(
-                  backgroundColor: Colors.transparent,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                ),
-                icon: const Icon(Icons.add),
-                label: const Text('Create Squad'),
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(sheetCtx2).viewInsets.bottom + 24,
+            left: 20, right: 20, top: 8,
+          ),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Center(child: Container(
+              width: 40, height: 4, margin: const EdgeInsets.only(bottom: 20),
+              decoration: BoxDecoration(
+                color: cs.onSurface.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(2)),
+            )),
+            Row(children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppColors.indigo.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(12)),
+                child: const Icon(Icons.group_add_outlined, color: AppColors.indigo)),
+              const SizedBox(width: 12),
+              Text('Create Study Squad', style: TextStyle(
+                fontFamily: 'Syne', fontSize: 18, fontWeight: FontWeight.w700,
+                color: cs.onSurface)),
+            ]),
+            const SizedBox(height: 20),
+            TextField(
+              controller: nameCtrl,
+              style: TextStyle(color: cs.onSurface),
+              decoration: InputDecoration(
+                labelText: 'Squad name *',
+                hintText: 'e.g. OS Study Group',
+                prefixIcon: Icon(Icons.people_outline, size: 20,
+                  color: cs.onSurface.withOpacity(0.4)),
               ),
             ),
-          ),
-        ]),
-      )),
+            const SizedBox(height: 12),
+            TextField(
+              controller: descCtrl,
+              style: TextStyle(color: cs.onSurface),
+              decoration: InputDecoration(
+                labelText: 'Description (optional)',
+                prefixIcon: Icon(Icons.notes_outlined, size: 20,
+                  color: cs.onSurface.withOpacity(0.4)),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text('Category', style: TextStyle(
+              color: cs.onSurface.withOpacity(0.5), fontSize: 12, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(children: _kGroupCategories.map((cat) {
+                final sel = selectedCategory == cat.id;
+                return GestureDetector(
+                  onTap: () => setSheet(() => selectedCategory = cat.id),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    margin: const EdgeInsets.only(right: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: sel ? cat.color.withOpacity(0.15) : cs.onSurface.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: sel ? cat.color.withOpacity(0.5) : Colors.transparent,
+                        width: sel ? 1.5 : 1,
+                      ),
+                    ),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(cat.icon, size: 12, color: sel ? cat.color : cs.onSurface.withOpacity(0.35)),
+                      const SizedBox(width: 5),
+                      Text(cat.label, style: TextStyle(
+                        fontSize: 11, fontWeight: sel ? FontWeight.w700 : FontWeight.w500,
+                        color: sel ? cat.color : cs.onSurface.withOpacity(0.5))),
+                    ]),
+                  ),
+                );
+              }).toList()),
+            ),
+            const SizedBox(height: 20),
+            GestureDetector(
+              onTap: () async {
+                final name = nameCtrl.text.trim();
+                if (name.isEmpty) return;
+                Navigator.pop(sheetCtx2);
+                await ref.read(hubProvider.notifier).createGroup(
+                  name,
+                  descCtrl.text.trim().isEmpty ? null : descCtrl.text.trim(),
+                  category: selectedCategory,
+                );
+                ref.invalidate(groupsProvider);
+                if (mounted && ctx.mounted) {
+                  final err = ref.read(hubProvider).error;
+                  ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+                    content: Text(err != null ? 'Error: $err' : 'Squad created! ✅'),
+                    backgroundColor: err != null ? AppColors.rose : AppColors.green,
+                  ));
+                }
+              },
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                decoration: DesignStyles.gradientButton(),
+                child: const Center(child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.add_rounded, color: Colors.white, size: 18),
+                  SizedBox(width: 8),
+                  Text('Create Squad', style: TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
+                ])),
+              ),
+            ),
+          ]),
+        );
+      }),
     );
   }
 
   void _showJoinSheet(BuildContext ctx) {
     final codeCtrl = TextEditingController();
-
     showModalBottomSheet(
       context: ctx,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (sheetCtx) => Container(
-        decoration: const BoxDecoration(
-          color: Color(0xFF0F1228),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-          border: Border(top: BorderSide(color: DesignColor.borderH)),
-        ),
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + 20,
-          left: 20, right: 20, top: 20,
-        ),
-        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(color: DesignColor.indigoGlow, borderRadius: BorderRadius.circular(12)),
-              child: const Icon(Icons.qr_code_scanner_outlined, color: DesignColor.indigo),
-            ),
-            const SizedBox(width: 12),
-            Text('Join a Squad', style: Theme.of(ctx).textTheme.titleLarge),
-          ]),
-          const SizedBox(height: 8),
-          const Text('Ask your squad leader for the 8-character invite code.',
-            style: TextStyle(color: DesignColor.sub, fontSize: 13)),
-          const SizedBox(height: 20),
-          _DarkTextField(
-            controller: codeCtrl,
-            label: 'Invite Code',
-            hint: 'e.g. ABC12345',
-            icon: Icons.vpn_key_outlined,
-            maxLength: 8,
-            textCaps: TextCapitalization.characters,
+      builder: (sheetCtx) {
+        final cs = Theme.of(sheetCtx).colorScheme;
+        return Container(
+          decoration: BoxDecoration(
+            color: cs.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
           ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: Container(
-              decoration: DesignStyles.gradientButton(),
-              child: FilledButton.icon(
-                onPressed: () async {
-                  final code = codeCtrl.text.trim();
-                  if (code.length != 8) return;
-                  Navigator.pop(sheetCtx);
-                  await ref.read(hubProvider.notifier).joinGroup(code);
-                  ref.invalidate(groupsProvider);
-                  if (mounted && ctx.mounted) {
-                    final err = ref.read(hubProvider).error;
-                    if (err != null) {
-                      ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('$err'), backgroundColor: DesignColor.rose));
-                    } else {
-                      ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Joined squad! 🎉')));
-                    }
-                  }
-                },
-                style: FilledButton.styleFrom(
-                  backgroundColor: Colors.transparent,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                ),
-                icon: const Icon(Icons.login),
-                label: const Text('Join Squad'),
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + 24,
+            left: 20, right: 20, top: 8,
+          ),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Center(child: Container(
+              width: 40, height: 4, margin: const EdgeInsets.only(bottom: 20),
+              decoration: BoxDecoration(
+                color: cs.onSurface.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(2)),
+            )),
+            Row(children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppColors.cyan.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(12)),
+                child: const Icon(Icons.qr_code_scanner_outlined, color: AppColors.cyan)),
+              const SizedBox(width: 12),
+              Text('Join a Squad', style: TextStyle(
+                fontFamily: 'Syne', fontSize: 18, fontWeight: FontWeight.w700,
+                color: cs.onSurface)),
+            ]),
+            const SizedBox(height: 8),
+            Text('Ask your squad leader for the 8-character invite code.',
+              style: TextStyle(color: cs.onSurface.withOpacity(0.55), fontSize: 13)),
+            const SizedBox(height: 20),
+            TextField(
+              controller: codeCtrl,
+              maxLength: 8,
+              textCapitalization: TextCapitalization.characters,
+              style: TextStyle(color: cs.onSurface, letterSpacing: 2, fontWeight: FontWeight.w700),
+              decoration: InputDecoration(
+                labelText: 'Invite Code',
+                hintText: 'e.g. ABC12345',
+                prefixIcon: Icon(Icons.vpn_key_outlined, size: 20,
+                  color: cs.onSurface.withOpacity(0.4)),
               ),
             ),
-          ),
-        ]),
+            const SizedBox(height: 12),
+            GestureDetector(
+              onTap: () async {
+                final code = codeCtrl.text.trim();
+                if (code.length != 8) return;
+                Navigator.pop(sheetCtx);
+                await ref.read(hubProvider.notifier).joinGroup(code);
+                ref.invalidate(groupsProvider);
+                if (mounted && ctx.mounted) {
+                  final err = ref.read(hubProvider).error;
+                  ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+                    content: Text(err != null ? '$err' : 'Joined squad! 🎉'),
+                    backgroundColor: err != null ? AppColors.rose : AppColors.green,
+                  ));
+                }
+              },
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                decoration: DesignStyles.gradientButton(),
+                child: const Center(child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.login_rounded, color: Colors.white, size: 18),
+                  SizedBox(width: 8),
+                  Text('Join Squad', style: TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
+                ])),
+              ),
+            ),
+          ]),
+        );
+      },
+    );
+  }
+}
+
+// ── App Bar icon button ───────────────────────────────────────────────────────
+class _AppBarBtn extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  const _AppBarBtn({required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 36, height: 36,
+        decoration: BoxDecoration(
+          color: cs.onSurface.withOpacity(0.07),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(icon, size: 18, color: cs.onSurface.withOpacity(0.5)),
       ),
     );
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Dark-styled text field
-// ─────────────────────────────────────────────────────────────────────────────
-class _DarkTextField extends StatelessWidget {
-  final TextEditingController controller;
-  final String label;
-  final String? hint;
-  final IconData icon;
-  final int? maxLength;
-  final TextCapitalization textCaps;
-
-  const _DarkTextField({
-    required this.controller,
-    required this.label,
-    required this.icon,
-    this.hint,
-    this.maxLength,
-    this.textCaps = TextCapitalization.none,
-  });
-
-  @override
-  Widget build(BuildContext context) => TextField(
-    controller: controller,
-    maxLength: maxLength,
-    textCapitalization: textCaps,
-    style: const TextStyle(color: DesignColor.text, fontSize: 14),
-    decoration: InputDecoration(
-      labelText: label,
-      hintText: hint,
-      labelStyle: const TextStyle(color: DesignColor.sub),
-      hintStyle: const TextStyle(color: DesignColor.muted),
-      prefixIcon: Icon(icon, color: DesignColor.muted, size: 20),
-      filled: true,
-      fillColor: DesignColor.s1,
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: DesignColor.border),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: DesignColor.indigo),
-      ),
-      counterStyle: const TextStyle(color: DesignColor.muted),
-    ),
-  );
+// ── Sticky sliver header ──────────────────────────────────────────────────────
+class _StickyHeader extends SliverPersistentHeaderDelegate {
+  final Widget child;
+  const _StickyHeader({required this.child});
+  @override Widget build(BuildContext ctx, double s, bool o) => child;
+  @override double get maxExtent => 60;
+  @override double get minExtent => 60;
+  @override bool shouldRebuild(_) => false;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Filter Chip widget
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Filter chip ───────────────────────────────────────────────────────────────
 class _FilterChip extends StatelessWidget {
   final String label;
   final IconData icon;
   final Color color;
   final bool selected;
   final VoidCallback onTap;
-  const _FilterChip({required this.label, required this.icon, required this.color, required this.selected, required this.onTap});
+  const _FilterChip({required this.label, required this.icon, required this.color,
+    required this.selected, required this.onTap});
 
   @override
-  Widget build(BuildContext context) => GestureDetector(
-    onTap: onTap,
-    child: AnimatedContainer(
-      duration: const Duration(milliseconds: 180),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: selected ? color.withOpacity(0.18) : DesignColor.s1,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: selected ? color : DesignColor.border, width: selected ? 1.5 : 1),
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: selected ? color.withOpacity(0.15) : cs.onSurface.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: selected ? color.withOpacity(0.5) : Colors.transparent,
+            width: selected ? 1.5 : 1,
+          ),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 12, color: selected ? color : cs.onSurface.withOpacity(0.4)),
+          const SizedBox(width: 5),
+          Text(label, style: TextStyle(
+            fontSize: 11, fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+            color: selected ? color : cs.onSurface.withOpacity(0.5))),
+        ]),
       ),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(icon, size: 12, color: selected ? color : DesignColor.muted),
-        const SizedBox(width: 5),
-        Text(label, style: TextStyle(
-          fontSize: 11, fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-          color: selected ? color : DesignColor.sub,
-        )),
-      ]),
-    ),
-  );
+    );
+  }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Group Card
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Group Card ────────────────────────────────────────────────────────────────
 class _GroupCard extends ConsumerWidget {
   final Map<String, dynamic> group;
   const _GroupCard({required this.group});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = context.isDark;
     final name = group['name'] as String? ?? 'Unnamed';
     final desc = group['description'] as String?;
     final role = group['role'] as String? ?? 'member';
@@ -609,125 +651,141 @@ class _GroupCard extends ConsumerWidget {
 
     final hue = name.codeUnits.fold(0, (a, b) => a + b) % 360;
     final avatarColor = HSLColor.fromAHSL(1, hue.toDouble(), 0.65, 0.55).toColor();
+    final catMeta = _kGroupCategories.firstWhere((c) => c.id == categoryId,
+        orElse: () => _kGroupCategories.first);
 
-    // Find category meta
-    final catMeta = _kGroupCategories.firstWhere(
-      (c) => c.id == categoryId,
-      orElse: () => _kGroupCategories.first,
-    );
-
-    return Container(
-      decoration: DesignStyles.glassCard(),
+    return Material(
+      color: Colors.transparent,
       child: InkWell(
         borderRadius: BorderRadius.circular(18),
         onTap: () => context.push('/hub/$gId'),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
+        child: Container(
+          decoration: DesignStyles.card(context),
+          padding: const EdgeInsets.all(16),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
               // Avatar
               Container(
-                width: 46, height: 46,
+                width: 48, height: 48,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(14),
                   gradient: LinearGradient(
-                    colors: [avatarColor, avatarColor.withOpacity(0.6)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
+                    colors: [avatarColor, avatarColor.withOpacity(0.7)],
+                    begin: Alignment.topLeft, end: Alignment.bottomRight,
                   ),
-                  boxShadow: [BoxShadow(color: avatarColor.withOpacity(0.4), blurRadius: 12, offset: const Offset(0, 4))],
+                  boxShadow: [BoxShadow(color: avatarColor.withOpacity(0.35), blurRadius: 12, offset: const Offset(0, 4))],
                 ),
-                child: Center(
-                  child: Text(name[0].toUpperCase(),
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 19, fontFamily: 'Syne')),
-                ),
+                child: Center(child: Text(name[0].toUpperCase(), style: const TextStyle(
+                  color: Colors.white, fontWeight: FontWeight.w800, fontSize: 20, fontFamily: 'Syne'))),
               ),
               const SizedBox(width: 12),
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Row(children: [
-                  Expanded(child: Text(name,
-                    style: const TextStyle(color: DesignColor.text, fontWeight: FontWeight.w700, fontSize: 15, fontFamily: 'Syne'))),
-                  // Admin badge
+                  Expanded(child: Text(name, style: TextStyle(
+                    color: cs.onSurface, fontWeight: FontWeight.w700, fontSize: 15, fontFamily: 'Syne'))),
                   if (role == 'admin')
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                       decoration: BoxDecoration(
-                        color: DesignColor.indigoGlow,
+                        color: AppColors.indigo.withOpacity(0.12),
                         borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: DesignColor.borderH),
+                        border: Border.all(color: AppColors.indigo.withOpacity(0.3)),
                       ),
-                      child: const Text('Admin', style: TextStyle(fontSize: 9, color: DesignColor.indigo, fontWeight: FontWeight.w700)),
+                      child: const Text('Admin', style: TextStyle(
+                        fontSize: 9, color: AppColors.indigo, fontWeight: FontWeight.w700)),
                     ),
                 ]),
-                const SizedBox(height: 4),
-                // Category chip
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: catMeta.color.withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(6),
+                const SizedBox(height: 5),
+                Row(children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: catMeta.color.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(catMeta.icon, size: 10, color: catMeta.color),
+                      const SizedBox(width: 4),
+                      Text(catMeta.label, style: TextStyle(
+                        fontSize: 10, color: catMeta.color, fontWeight: FontWeight.w700)),
+                    ]),
                   ),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(catMeta.icon, size: 10, color: catMeta.color),
-                    const SizedBox(width: 4),
-                    Text(catMeta.label, style: TextStyle(fontSize: 10, color: catMeta.color, fontWeight: FontWeight.w700)),
-                  ]),
-                ),
+                ]),
                 if (desc != null) ...[
                   const SizedBox(height: 3),
                   Text(desc, maxLines: 1, overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: DesignColor.sub, fontSize: 12)),
+                    style: TextStyle(color: cs.onSurface.withOpacity(0.5), fontSize: 12)),
                 ],
               ])),
               PopupMenuButton<String>(
-                icon: const Icon(Icons.more_vert, color: DesignColor.muted),
-                color: const Color(0xFF0F1228),
+                icon: Icon(Icons.more_vert_rounded, color: cs.onSurface.withOpacity(0.35), size: 20),
+                color: isDark ? AppColors.darkSurface : Colors.white,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  side: const BorderSide(color: DesignColor.border),
+                  borderRadius: BorderRadius.circular(14),
+                  side: BorderSide(color: isDark ? AppColors.darkBorder : AppColors.lightBorder),
                 ),
                 onSelected: (val) {
                   if (val == 'chat') context.push('/hub/$gId');
                   if (val == 'whiteboard') context.go('/whiteboard/$gId');
                   if (val == 'my_tasks') context.push('/my-tasks');
                 },
-                itemBuilder: (_) => const [
-                  PopupMenuItem(value: 'chat',
-                    child: ListTile(leading: Icon(Icons.chat_outlined, color: DesignColor.sub), title: Text('Open Chat', style: TextStyle(color: DesignColor.text)), dense: true)),
-                  PopupMenuItem(value: 'whiteboard',
-                    child: ListTile(leading: Icon(Icons.draw_outlined, color: DesignColor.sub), title: Text('Whiteboard', style: TextStyle(color: DesignColor.text)), dense: true)),
-                  PopupMenuItem(value: 'my_tasks',
-                    child: ListTile(leading: Icon(Icons.checklist_rtl_outlined, color: DesignColor.sub), title: Text('My Tasks', style: TextStyle(color: DesignColor.text)), dense: true)),
+                itemBuilder: (_) => [
+                  PopupMenuItem(value: 'chat', child: Row(children: [
+                    Icon(Icons.chat_outlined, color: AppColors.indigo, size: 16),
+                    const SizedBox(width: 10),
+                    Text('Open Chat', style: TextStyle(color: cs.onSurface, fontSize: 13)),
+                  ])),
+                  PopupMenuItem(value: 'whiteboard', child: Row(children: [
+                    Icon(Icons.draw_outlined, color: AppColors.violet, size: 16),
+                    const SizedBox(width: 10),
+                    Text('Whiteboard', style: TextStyle(color: cs.onSurface, fontSize: 13)),
+                  ])),
+                  PopupMenuItem(value: 'my_tasks', child: Row(children: [
+                    Icon(Icons.checklist_rtl_outlined, color: AppColors.green, size: 16),
+                    const SizedBox(width: 10),
+                    Text('My Tasks', style: TextStyle(color: cs.onSurface, fontSize: 13)),
+                  ])),
                 ],
               ),
             ]),
-            // Action buttons row
-            Padding(
-              padding: const EdgeInsets.only(top: 12),
-              child: Row(children: [
-                Expanded(child: _ActionBtn(icon: Icons.chat_outlined, label: 'Chat', onTap: () => context.push('/hub/$gId'))),
-                const SizedBox(width: 7),
-                Expanded(child: _ActionBtn(icon: Icons.view_kanban_outlined, label: 'Kanban', onTap: () => context.go('/kanban/$gId'))),
-                const SizedBox(width: 7),
-                Expanded(child: _ActionBtn(icon: Icons.draw_outlined, label: 'Whiteboard', onTap: () => context.go('/whiteboard/$gId'))),
-              ]),
-            ),
-            if (inviteCode.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 10),
-                child: GestureDetector(
-                  onTap: () {
-                    Clipboard.setData(ClipboardData(text: inviteCode));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Invite code copied!'), duration: Duration(seconds: 2)));
-                  },
+            const SizedBox(height: 12),
+            // Action buttons
+            Row(children: [
+              _ActionTile(icon: Icons.chat_bubble_outline_rounded, label: 'Chat',
+                color: AppColors.indigo, onTap: () => context.push('/hub/$gId')),
+              const SizedBox(width: 8),
+              _ActionTile(icon: Icons.view_kanban_outlined, label: 'Kanban',
+                color: AppColors.violet, onTap: () => context.go('/kanban/$gId')),
+              const SizedBox(width: 8),
+              _ActionTile(icon: Icons.draw_outlined, label: 'Board',
+                color: AppColors.cyan, onTap: () => context.go('/whiteboard/$gId')),
+            ]),
+            if (inviteCode.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              GestureDetector(
+                onTap: () {
+                  Clipboard.setData(ClipboardData(text: inviteCode));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Invite code copied!'),
+                      duration: Duration(seconds: 2)));
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppColors.indigo.withOpacity(0.07),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppColors.indigo.withOpacity(0.2)),
+                  ),
                   child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    const Icon(Icons.copy_outlined, size: 11, color: DesignColor.indigo),
-                    const SizedBox(width: 4),
-                    Text(inviteCode, style: const TextStyle(fontSize: 11, color: DesignColor.indigo, fontWeight: FontWeight.w600, letterSpacing: 1.2)),
+                    const Icon(Icons.copy_outlined, size: 12, color: AppColors.indigo),
+                    const SizedBox(width: 6),
+                    Text(inviteCode, style: const TextStyle(
+                      fontSize: 11, color: AppColors.indigo,
+                      fontWeight: FontWeight.w700, letterSpacing: 1.5)),
                   ]),
                 ),
               ),
+            ],
           ]),
         ),
       ),
@@ -735,83 +793,94 @@ class _GroupCard extends ConsumerWidget {
   }
 }
 
-class _ActionBtn extends StatelessWidget {
+class _ActionTile extends StatelessWidget {
   final IconData icon;
   final String label;
+  final Color color;
   final VoidCallback onTap;
-  const _ActionBtn({required this.icon, required this.label, required this.onTap});
+  const _ActionTile({required this.icon, required this.label, required this.color, required this.onTap});
 
   @override
-  Widget build(BuildContext context) => GestureDetector(
-    onTap: onTap,
-    child: Container(
-      padding: const EdgeInsets.symmetric(vertical: 7),
-      decoration: BoxDecoration(
-        color: DesignColor.s1,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: DesignColor.border),
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Expanded(child: GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: color.withOpacity(0.2)),
+        ),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(height: 4),
+          Text(label, style: TextStyle(
+            color: color, fontSize: 10, fontWeight: FontWeight.w700)),
+        ]),
       ),
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Icon(icon, size: 14, color: DesignColor.sub),
-        const SizedBox(height: 3),
-        Text(label, style: const TextStyle(color: DesignColor.sub, fontSize: 9.5, fontWeight: FontWeight.w600)),
-      ]),
-    ),
-  );
+    ));
+  }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Empty + Error states
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Empty + Error states ──────────────────────────────────────────────────────
 class _EmptyState extends StatelessWidget {
   final VoidCallback onCreate;
   final VoidCallback onJoin;
   const _EmptyState({required this.onCreate, required this.onJoin});
 
   @override
-  Widget build(BuildContext context) => Center(child: Padding(
-    padding: const EdgeInsets.all(32),
-    child: Column(mainAxisSize: MainAxisSize.min, children: [
-      Container(
-        padding: const EdgeInsets.all(24),
-        decoration: const BoxDecoration(color: DesignColor.indigoGlow, shape: BoxShape.circle),
-        child: const Icon(Icons.people_outline, size: 54, color: DesignColor.indigo),
-      ),
-      const SizedBox(height: 20),
-      Text('No squads yet', style: Theme.of(context).textTheme.headlineSmall),
-      const SizedBox(height: 8),
-      const Text('Create a study squad or join one with an invite code.',
-        textAlign: TextAlign.center, style: TextStyle(color: DesignColor.sub, fontSize: 14)),
-      const SizedBox(height: 28),
-      Row(children: [
-        Expanded(child: OutlinedButton.icon(
-          onPressed: onJoin,
-          icon: const Icon(Icons.qr_code_scanner_outlined),
-          label: const Text('Join'),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: DesignColor.indigo,
-            side: const BorderSide(color: DesignColor.borderH),
-            padding: const EdgeInsets.symmetric(vertical: 14),
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Center(child: Padding(
+      padding: const EdgeInsets.all(40),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Container(
+          padding: const EdgeInsets.all(28),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: LinearGradient(colors: [
+              AppColors.violet.withOpacity(0.2), AppColors.indigo.withOpacity(0.1)]),
           ),
-        )),
-        const SizedBox(width: 12),
-        Expanded(child: Container(
-          decoration: DesignStyles.gradientButton(),
-          child: FilledButton.icon(
-            onPressed: onCreate,
-            style: FilledButton.styleFrom(
-              backgroundColor: Colors.transparent,
-              foregroundColor: Colors.white,
-              elevation: 0,
+          child: const Icon(Icons.people_outline_rounded, size: 54, color: AppColors.indigo)),
+        const SizedBox(height: 24),
+        Text('No squads yet', style: TextStyle(
+          fontFamily: 'Syne', fontWeight: FontWeight.w800, fontSize: 22, color: cs.onSurface)),
+        const SizedBox(height: 10),
+        Text('Create a study squad or join one with an invite code.',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: cs.onSurface.withOpacity(0.5), fontSize: 14, height: 1.5)),
+        const SizedBox(height: 28),
+        Row(children: [
+          Expanded(child: OutlinedButton.icon(
+            onPressed: onJoin,
+            icon: const Icon(Icons.qr_code_scanner_outlined, size: 16),
+            label: const Text('Join'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.indigo,
+              side: BorderSide(color: AppColors.indigo.withOpacity(0.4)),
               padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             ),
-            icon: const Icon(Icons.group_add_outlined),
-            label: const Text('Create'),
-          ),
-        )),
+          )),
+          const SizedBox(width: 12),
+          Expanded(child: GestureDetector(
+            onTap: onCreate,
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              decoration: DesignStyles.gradientButton(),
+              child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                Icon(Icons.group_add_outlined, color: Colors.white, size: 16),
+                SizedBox(width: 8),
+                Text('Create', style: TextStyle(
+                  color: Colors.white, fontWeight: FontWeight.w700)),
+              ]),
+            ),
+          )),
+        ]),
       ]),
-    ]),
-  ));
+    ));
+  }
 }
 
 class _ErrorState extends StatelessWidget {
@@ -820,29 +889,37 @@ class _ErrorState extends StatelessWidget {
   const _ErrorState({required this.message, required this.onRetry});
 
   @override
-  Widget build(BuildContext context) => Center(child: Padding(
-    padding: const EdgeInsets.all(32),
-    child: Column(mainAxisSize: MainAxisSize.min, children: [
-      const Icon(Icons.wifi_off_outlined, size: 56, color: DesignColor.rose),
-      const SizedBox(height: 16),
-      Text('Could not load groups', style: Theme.of(context).textTheme.titleMedium),
-      const SizedBox(height: 8),
-      const Text('Make sure you\'re signed in and the backend is running.',
-        textAlign: TextAlign.center, style: TextStyle(color: DesignColor.sub)),
-      const SizedBox(height: 20),
-      Container(
-        decoration: DesignStyles.gradientButton(),
-        child: FilledButton.icon(
-          onPressed: onRetry,
-          style: FilledButton.styleFrom(
-            backgroundColor: Colors.transparent,
-            foregroundColor: Colors.white,
-            elevation: 0,
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Center(child: Padding(
+      padding: const EdgeInsets.all(40),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle, color: AppColors.rose.withOpacity(0.1)),
+          child: const Icon(Icons.wifi_off_outlined, size: 44, color: AppColors.rose)),
+        const SizedBox(height: 20),
+        Text('Could not load groups', style: TextStyle(
+          fontFamily: 'Syne', fontWeight: FontWeight.w700, fontSize: 18, color: cs.onSurface)),
+        const SizedBox(height: 8),
+        Text('Make sure the backend is running.',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: cs.onSurface.withOpacity(0.5), fontSize: 13)),
+        const SizedBox(height: 24),
+        GestureDetector(
+          onTap: onRetry,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            decoration: DesignStyles.gradientButton(),
+            child: const Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(Icons.refresh_rounded, color: Colors.white, size: 16),
+              SizedBox(width: 8),
+              Text('Retry', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+            ]),
           ),
-          icon: const Icon(Icons.refresh),
-          label: const Text('Retry'),
         ),
-      ),
-    ]),
-  ));
+      ]),
+    ));
+  }
 }

@@ -121,107 +121,107 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final isDark = context.isDark;
+
     return Scaffold(
-      backgroundColor: DesignColor.bg,
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFF07091A), Color(0xFF0F1228), Color(0xFF07091A)],
-            begin: Alignment.topLeft, end: Alignment.bottomRight,
-          ),
-        ),
-        child: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: Column(children: [
-              const SizedBox(height: 60),
-              // Logo/Brand
-              Container(
-                width: 80, height: 80,
-                decoration: BoxDecoration(
-                  color: DesignColor.indigoGlow,
-                  borderRadius: BorderRadius.circular(22),
-                  border: Border.all(color: DesignColor.indigo.withOpacity(0.3)),
-                ),
-                child: const Icon(Icons.auto_awesome, color: DesignColor.indigo, size: 44),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(children: [
+            const SizedBox(height: 60),
+            // Logo/Brand
+            Container(
+              width: 80, height: 80,
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.indigo.withOpacity(0.15) : AppColors.indigo.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(color: AppColors.indigo.withOpacity(isDark ? 0.3 : 0.15)),
               ),
-              const SizedBox(height: 24),
-              const Text('Lumina', style: TextStyle(
-                fontFamily: 'Syne', fontSize: 42, fontWeight: FontWeight.w800, color: Colors.white)),
-              const Text('Your proactive engineering sidekick',
-                style: TextStyle(color: DesignColor.sub, fontSize: 14)),
-              const SizedBox(height: 40),
-              // Auth card
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: DesignStyles.glassCard(),
-                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                  // Tabs
-                  Row(children: [
-                    Expanded(child: _TabBtn(label: 'Sign In', selected: _isLogin,
-                      onTap: () => setState(() { _isLogin = true; _error = null; }))),
-                    Expanded(child: _TabBtn(label: 'Sign Up', selected: !_isLogin,
-                      onTap: () => setState(() { _isLogin = false; _error = null; }))),
-                  ]),
-                  const SizedBox(height: 20),
-                  TextField(
-                    controller: _emailCtrl,
-                    decoration: const InputDecoration(labelText: 'Email', prefixIcon: Icon(Icons.email_outlined)),
-                    keyboardType: TextInputType.emailAddress,
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _passCtrl,
-                    decoration: const InputDecoration(labelText: 'Password', prefixIcon: Icon(Icons.lock_outline)),
-                    obscureText: true,
-                    onSubmitted: (_) => _emailAuth(),
-                  ),
-                  if (_error != null) ...[
-                    const SizedBox(height: 10),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: cs.errorContainer, borderRadius: BorderRadius.circular(10)),
-                      child: Text(_error!, style: TextStyle(color: cs.onErrorContainer, fontSize: 13)),
-                    ),
-                  ],
-                  const SizedBox(height: 16),
-                  Container(
-                    decoration: DesignStyles.gradientButton(),
-                    child: FilledButton(
-                      onPressed: _isLoading ? null : _emailAuth,
-                      style: FilledButton.styleFrom(
-                        backgroundColor: Colors.transparent,
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                      child: _isLoading
-                        ? const SizedBox(width: 20, height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                        : Text(_isLogin ? 'Sign In' : 'Create Account',
-                            style: const TextStyle(fontWeight: FontWeight.w700)),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  OutlinedButton.icon(
-                    onPressed: _isLoading ? null : _googleAuth,
-                    icon: const Icon(Icons.g_mobiledata, size: 28),
-                    label: const Text('Continue with Google'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.white,
-                      side: const BorderSide(color: DesignColor.borderH),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    ),
-                  ),
+              child: const Icon(Icons.auto_awesome, color: AppColors.indigo, size: 44),
+            ),
+            const SizedBox(height: 24),
+            Text('Lumina', style: TextStyle(
+              fontFamily: 'Syne', fontSize: 42, fontWeight: FontWeight.w800, color: cs.onSurface)),
+            Text('Your proactive engineering sidekick',
+              style: TextStyle(color: cs.onSurface.withOpacity(0.5), fontSize: 14)),
+            const SizedBox(height: 40),
+            // Auth card
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: DesignStyles.glassCard(context),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                // Tabs
+                Row(children: [
+                  Expanded(child: _TabBtn(label: 'Sign In', selected: _isLogin,
+                    onTap: () => setState(() { _isLogin = true; _error = null; }))),
+                  Expanded(child: _TabBtn(label: 'Sign Up', selected: !_isLogin,
+                    onTap: () => setState(() { _isLogin = false; _error = null; }))),
                 ]),
-              ),
-              const SizedBox(height: 40),
-            ]),
-          ),
+                const SizedBox(height: 20),
+                TextField(
+                  controller: _emailCtrl,
+                  style: TextStyle(color: cs.onSurface),
+                  decoration: InputDecoration(
+                    labelText: 'Email', 
+                    prefixIcon: Icon(Icons.email_outlined, color: cs.onSurface.withOpacity(0.4)),
+                  ),
+                  keyboardType: TextInputType.emailAddress,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _passCtrl,
+                  style: TextStyle(color: cs.onSurface),
+                  decoration: InputDecoration(
+                    labelText: 'Password', 
+                    prefixIcon: Icon(Icons.lock_outline, color: cs.onSurface.withOpacity(0.4)),
+                  ),
+                  obscureText: true,
+                  onSubmitted: (_) => _emailAuth(),
+                ),
+                if (_error != null) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: cs.errorContainer, borderRadius: BorderRadius.circular(10)),
+                    child: Text(_error!, style: TextStyle(color: cs.onErrorContainer, fontSize: 13)),
+                  ),
+                ],
+                const SizedBox(height: 16),
+                Container(
+                  decoration: DesignStyles.gradientButton(),
+                  child: FilledButton(
+                    onPressed: _isLoading ? null : _emailAuth,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.transparent,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    child: _isLoading
+                      ? const SizedBox(width: 20, height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : Text(_isLogin ? 'Sign In' : 'Create Account',
+                          style: const TextStyle(fontWeight: FontWeight.w700)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: _isLoading ? null : _googleAuth,
+                  icon: const Icon(Icons.g_mobiledata, size: 28),
+                  label: const Text('Continue with Google'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: cs.onSurface,
+                    side: BorderSide(color: AppColors.border(context)),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
+                ),
+              ]),
+            ),
+            const SizedBox(height: 40),
+          ]),
         ),
       ),
     );
@@ -236,18 +236,19 @@ class _TabBtn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
-          color: selected ? Theme.of(context).colorScheme.primary : Colors.transparent,
+          color: selected ? AppColors.indigo : Colors.transparent,
           borderRadius: BorderRadius.circular(10),
         ),
         child: Text(label, textAlign: TextAlign.center, style: TextStyle(
           fontWeight: FontWeight.w700,
-          color: selected ? Colors.white : Theme.of(context).colorScheme.outline,
+          color: selected ? Colors.white : cs.onSurface.withOpacity(0.4),
         )),
       ),
     );

@@ -14,23 +14,26 @@ class FlowGraphScreen extends ConsumerWidget {
     final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
-      backgroundColor: DesignColor.bg,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         title: const Text('Cognitive Flow',
           style: TextStyle(fontFamily: 'Syne', fontWeight: FontWeight.w800)),
         actions: [
           IconButton(
-            icon: const Icon(Icons.auto_awesome, color: DesignColor.amber),
+            icon: const Icon(Icons.auto_awesome, color: AppColors.amber),
             tooltip: 'Generate Demo Data',
             onPressed: () async {
               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Seeding demo data...')));
               await ref.read(contextSwitchProvider.notifier).seedDemoData();
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✨ Demo Data Generated!'), backgroundColor: DesignColor.green));
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                content: Text('✨ Demo Data Generated!'), 
+                backgroundColor: AppColors.green
+              ));
             },
           ),
           IconButton(
-            icon: const Icon(Icons.refresh_outlined, color: DesignColor.sub),
+            icon: Icon(Icons.refresh_outlined, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4)),
             onPressed: () => ref.invalidate(contextSwitchProvider),
           ),
         ],
@@ -38,9 +41,9 @@ class FlowGraphScreen extends ConsumerWidget {
       body: stateAsync.when(
         loading: () => const FlowShimmer(),
         error: (e, _) => Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Icon(Icons.error_outline, size: 48, color: DesignColor.rose),
+          const Icon(Icons.error_outline, size: 48, color: AppColors.rose),
           const SizedBox(height: 8),
-          Text('$e', textAlign: TextAlign.center, style: const TextStyle(color: DesignColor.sub)),
+          Text('$e', textAlign: TextAlign.center, style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5))),
         ])),
         data: (state) => RefreshIndicator(
           onRefresh: () async => ref.invalidate(contextSwitchProvider),
@@ -77,10 +80,10 @@ class _DebtDial extends StatelessWidget {
   const _DebtDial({required this.score});
 
   Color get _color {
-    if (score < 25) return DesignColor.green;
-    if (score < 50) return DesignColor.amber;
-    if (score < 75) return DesignColor.rose;
-    return DesignColor.indigo;
+    if (score < 25) return AppColors.green;
+    if (score < 50) return AppColors.amber;
+    if (score < 75) return AppColors.rose;
+    return AppColors.indigo;
   }
 
   String get _label {
@@ -94,10 +97,10 @@ class _DebtDial extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(24),
-      decoration: DesignStyles.glassCard(),
+      decoration: AppStyles.glassCard(context),
       child: Column(children: [
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          const Text('Cognitive Debt', style: TextStyle(color: DesignColor.text, fontWeight: FontWeight.w800, fontSize: 16, fontFamily: 'Syne')),
+          Text('Cognitive Debt', style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontWeight: FontWeight.w800, fontSize: 16, fontFamily: 'Syne')),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
@@ -124,7 +127,7 @@ class _DebtDial extends StatelessWidget {
             Column(mainAxisSize: MainAxisSize.min, children: [
               Text('${score.toStringAsFixed(0)}',
                 style: TextStyle(fontSize: 52, fontWeight: FontWeight.w900, color: _color, fontFamily: 'Syne')),
-              const Text('/100', style: TextStyle(color: DesignColor.muted, fontSize: 14, fontWeight: FontWeight.w600)),
+              Text('/100', style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4), fontSize: 14, fontWeight: FontWeight.w600)),
             ]),
           ]),
         ),
@@ -148,9 +151,9 @@ class _HistoryChart extends StatelessWidget {
 
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: DesignStyles.glassCard(),
+      decoration: AppStyles.glassCard(context),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('7-Day Trend', style: TextStyle(color: DesignColor.text, fontWeight: FontWeight.w800, fontSize: 14, fontFamily: 'Syne')),
+        Text('7-Day Trend', style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontWeight: FontWeight.w800, fontSize: 14, fontFamily: 'Syne')),
         const SizedBox(height: 16),
         SizedBox(
           height: 120,
@@ -167,7 +170,7 @@ class _HistoryChart extends StatelessWidget {
                 showTitles: true, reservedSize: 24,
                 getTitlesWidget: (v, _) => Text(
                   v.toInt() < days.length ? days[v.toInt()] : '',
-                  style: const TextStyle(fontSize: 10, color: DesignColor.muted, fontWeight: FontWeight.w600),
+                  style: TextStyle(fontSize: 10, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4), fontWeight: FontWeight.w600),
                 ),
               )),
               leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -177,10 +180,10 @@ class _HistoryChart extends StatelessWidget {
             maxY: 100,
             barGroups: List.generate(bars.length, (i) {
               final score = (bars[i]['score'] as num).toDouble();
-              Color barColor = score < 25 ? DesignColor.green
-                : score < 50 ? DesignColor.amber
-                : score < 75 ? DesignColor.rose
-                : DesignColor.indigo;
+              Color barColor = score < 25 ? AppColors.green
+                : score < 50 ? AppColors.amber
+                : score < 75 ? AppColors.rose
+                : AppColors.indigo;
               return BarChartGroupData(x: history.length - 1 - i, barRods: [
                 BarChartRodData(toY: score, color: barColor, width: 14, borderRadius: BorderRadius.circular(4)),
               ]);
@@ -204,16 +207,16 @@ class _InsightCard extends StatelessWidget {
     final (emoji, title, desc) = _content(score);
     final cs = Theme.of(context).colorScheme;
     return Container(
-      decoration: DesignStyles.glassCard(),
+      decoration: AppStyles.glassCard(context),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Row(children: [
           Text(emoji, style: const TextStyle(fontSize: 32)),
           const SizedBox(width: 16),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(title, style: const TextStyle(color: DesignColor.text, fontSize: 15, fontWeight: FontWeight.w800, fontFamily: 'Syne')),
+            Text(title, style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 15, fontWeight: FontWeight.w800, fontFamily: 'Syne')),
             const SizedBox(height: 4),
-            Text(desc, style: const TextStyle(fontSize: 13, color: DesignColor.sub)),
+            Text(desc, style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6))),
           ])),
         ]),
       ),
@@ -242,22 +245,22 @@ class _TipsCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: DesignColor.indigo.withOpacity(0.08),
+        color: AppColors.indigo.withOpacity(context.isDark ? 0.08 : 0.04),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: DesignColor.indigo.withOpacity(0.2)),
+        border: Border.all(color: AppColors.indigo.withOpacity(0.2)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const Row(children: [
-          Icon(Icons.lightbulb_outline, color: DesignColor.indigo, size: 18),
+          Icon(Icons.lightbulb_outline, color: AppColors.indigo, size: 18),
           SizedBox(width: 6),
-          Text('Focus Tips', style: TextStyle(fontWeight: FontWeight.w800, color: DesignColor.indigo, fontFamily: 'Syne')),
+          Text('Focus Tips', style: TextStyle(fontWeight: FontWeight.w800, color: AppColors.indigo, fontFamily: 'Syne')),
         ]),
         const SizedBox(height: 10),
         ...tips.map((t) => Padding(
           padding: const EdgeInsets.only(bottom: 6),
           child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('• ', style: TextStyle(color: DesignColor.indigo, fontWeight: FontWeight.w800)),
-            Expanded(child: Text(t, style: const TextStyle(color: DesignColor.sub, fontSize: 12))),
+            const Text('• ', style: TextStyle(color: AppColors.indigo, fontWeight: FontWeight.w800)),
+            Expanded(child: Text(t, style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6), fontSize: 12))),
           ]),
         )),
       ]),

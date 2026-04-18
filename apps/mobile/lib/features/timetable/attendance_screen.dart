@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'timetable_provider.dart';
+import '../../core/theme/design_tokens.dart';
 
 class AttendanceScreen extends ConsumerStatefulWidget {
   final String slotId;
@@ -36,14 +37,18 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final options = {
-      'present': (Colors.green, Icons.check_circle_outline, 'Present'),
-      'absent': (Colors.red, Icons.cancel_outlined, 'Absent'),
-      'cancelled': (Colors.orange, Icons.event_busy_outlined, 'Cancelled'),
-      'holiday': (Colors.blue, Icons.beach_access_outlined, 'Holiday'),
+      'present': (AppColors.green, Icons.check_circle_outline, 'Present'),
+      'absent': (AppColors.rose, Icons.cancel_outlined, 'Absent'),
+      'cancelled': (AppColors.orange, Icons.event_busy_outlined, 'Cancelled'),
+      'holiday': (AppColors.cyan, Icons.beach_access_outlined, 'Holiday'),
     };
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Mark Attendance')),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      appBar: AppBar(
+        title: const Text('Mark Attendance', style: TextStyle(fontFamily: 'Syne', fontWeight: FontWeight.w800)),
+        backgroundColor: Colors.transparent,
+      ),
       body: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
@@ -60,10 +65,8 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
                   duration: const Duration(milliseconds: 200),
                   margin: const EdgeInsets.only(bottom: 12),
                   padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: selected ? color.withOpacity(0.15) : cs.surfaceContainerHighest.withOpacity(0.5),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: selected ? color : Colors.transparent, width: 2),
+                  decoration: AppStyles.glassCard(context).copyWith(
+                    border: Border.all(color: selected ? color : AppColors.border(context), width: selected ? 2 : 1),
                   ),
                   child: Row(children: [
                     Icon(icon, color: selected ? color : cs.outline),
@@ -80,11 +83,20 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
               );
             }),
             const Spacer(),
-            ElevatedButton(
-              onPressed: _isLoading ? null : _submit,
-              child: _isLoading
-                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : const Text('Save'),
+            Container(
+              decoration: DesignStyles.gradientButton(),
+              child: ElevatedButton(
+                onPressed: _isLoading ? null : _submit,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.transparent,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                ),
+                child: _isLoading
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Text('Save Attendance', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+              ),
             ),
           ],
         ),

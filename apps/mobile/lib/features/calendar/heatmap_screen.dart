@@ -21,10 +21,10 @@ final heatmapProvider = FutureProvider<Map<String, dynamic>>((ref) async {
 // Stress palette — Google-quality colors
 // ─────────────────────────────────────────────────────────────────────────────
 const _kStress = {
-  'low':      _StressStyle(DesignColor.green, Color(0x2210B981), '😌', 'Relaxed'),
-  'medium':   _StressStyle(DesignColor.cyan,  Color(0x2206B6D4), '📘', 'Normal'),
-  'high':     _StressStyle(DesignColor.amber, Color(0x22F59E0B), '⚡', 'Busy'),
-  'critical': _StressStyle(DesignColor.rose,  Color(0x22EF4444), '🔥', 'Crunch!'),
+  'low':      _StressStyle(AppColors.green, Color(0x2210B981), '😌', 'Relaxed'),
+  'medium':   _StressStyle(AppColors.cyan,  Color(0x2206B6D4), '📘', 'Normal'),
+  'high':     _StressStyle(AppColors.amber, Color(0x22F59E0B), '⚡', 'Busy'),
+  'critical': _StressStyle(AppColors.rose,  Color(0x22EF4444), '🔥', 'Crunch!'),
 };
 
 class _StressStyle {
@@ -191,7 +191,12 @@ class _HeatmapScreenState extends ConsumerState<HeatmapScreen>
       ref.invalidate(heatmapProvider);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Event added ✔'), behavior: SnackBarBehavior.floating));
+          const SnackBar(
+            content: Text('Event added ✔'), 
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: AppColors.green,
+          )
+        );
       }
     }
   }
@@ -213,7 +218,7 @@ class _HeatmapScreenState extends ConsumerState<HeatmapScreen>
     });
 
     return Scaffold(
-      backgroundColor: DesignColor.bg,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: heatAsync.when(
         // On FIRST load (no cached data) → show full-screen shimmer skeleton
         loading: () => const CardListShimmer(count: 8, cardHeight: 56),
@@ -221,11 +226,11 @@ class _HeatmapScreenState extends ConsumerState<HeatmapScreen>
         // On subsequent loads (after invalidate) → keep showing calendar with overlay
         data: (fullHeatmap) => Stack(
           children: [
-            _buildBody(context, cs, isDark, DesignColor.bg, fullHeatmap),
+            _buildBody(context, cs, isDark, Theme.of(context).scaffoldBackgroundColor, fullHeatmap),
             if (_refreshing)
               const Positioned(
                 top: 0, left: 0, right: 0,
-                child: LinearProgressIndicator(color: DesignColor.indigo, backgroundColor: Colors.transparent),
+                child: LinearProgressIndicator(color: AppColors.indigo, backgroundColor: Colors.transparent),
               ),
           ],
         ),
@@ -267,6 +272,8 @@ class _HeatmapScreenState extends ConsumerState<HeatmapScreen>
           SliverAppBar(
             pinned: true, expandedHeight: 160,
             backgroundColor: mStyle.primary,
+            elevation: 0,
+            scrolledUnderElevation: 0,
             flexibleSpace: FlexibleSpaceBar(
               // Pass focused month so header shows correct month on navigation
               background: _AppBarBackground(
@@ -301,9 +308,9 @@ class _HeatmapScreenState extends ConsumerState<HeatmapScreen>
                 margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
-                  color: _bannerOk ? const Color(0xFF00897B).withOpacity(0.1) : Colors.red.shade50,
+                  color: _bannerOk ? AppColors.green.withOpacity(0.1) : AppColors.rose.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: _bannerOk ? const Color(0xFF00897B) : Colors.red, width: .8),
+                  border: Border.all(color: _bannerOk ? AppColors.green : AppColors.rose, width: .8),
                 ),
                 child: Row(children: [
                   Text(_bannerOk ? '✔' : '✖', style: const TextStyle(fontSize: 14)),
@@ -434,7 +441,7 @@ class _MonthStressBar extends StatelessWidget {
           height: 10,
           clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
-            color: cs.surfaceContainerHighest,
+            color: AppColors.surfaceContainer(context),
             borderRadius: BorderRadius.circular(6),
           ),
           child: Row(children: ['low','medium','high','critical'].map((l) {
@@ -477,11 +484,10 @@ class _CalendarCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-      decoration: DesignStyles.glassCard(),
+      decoration: AppStyles.glassCard(context),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
         child: TableCalendar(
@@ -499,7 +505,7 @@ class _CalendarCard extends StatelessWidget {
                 DateFormat.E().format(day)[0],
                 style: TextStyle(
                   fontSize: 12, fontWeight: FontWeight.w700,
-                  color: day.weekday == DateTime.sunday ? Colors.red.shade300 : cs.outline,
+                  color: day.weekday == DateTime.sunday ? AppColors.rose : cs.outline,
                 ),
               ),
             ),
@@ -510,15 +516,15 @@ class _CalendarCard extends StatelessWidget {
               child: Text('${day.day}', style: TextStyle(color: cs.outline.withOpacity(0.35), fontSize: 13))),
             markerBuilder: (_, __, ___) => const SizedBox.shrink(),
           ),
-          headerStyle: const HeaderStyle(
+          headerStyle: HeaderStyle(
             formatButtonVisible: false,
             titleCentered: true,
-            leftChevronIcon: Icon(Icons.chevron_left_rounded, color: DesignColor.sub),
-            rightChevronIcon: Icon(Icons.chevron_right_rounded, color: DesignColor.sub),
-            titleTextStyle: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: DesignColor.text, fontFamily: 'Syne'),
-            headerPadding: EdgeInsets.symmetric(vertical: 10),
+            leftChevronIcon: Icon(Icons.chevron_left_rounded, color: cs.onSurface.withOpacity(0.5)),
+            rightChevronIcon: Icon(Icons.chevron_right_rounded, color: cs.onSurface.withOpacity(0.5)),
+            titleTextStyle: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: cs.onSurface, fontFamily: 'Syne'),
+            headerPadding: const EdgeInsets.symmetric(vertical: 10),
             decoration: BoxDecoration(
-              border: Border(bottom: BorderSide(color: DesignColor.border)),
+              border: Border(bottom: BorderSide(color: AppColors.border(context))),
             ),
           ),
           calendarStyle: const CalendarStyle(outsideDaysVisible: false),
@@ -546,15 +552,15 @@ class _DayCell extends StatelessWidget {
     final evCount = (data?['events'] as List?)?.length ?? 0;
 
     Color bgColor = Colors.transparent;
-    Color textColor = DesignColor.text;
+    Color textColor = AppColors.textPrimary(context);
     Color? ringColor;
 
     if (isSelected) {
-      bgColor = style?.primary ?? DesignColor.indigo;
+      bgColor = style?.primary ?? AppColors.indigo;
       textColor = Colors.white;
     } else if (isToday) {
-      ringColor = DesignColor.indigo;
-      textColor = DesignColor.indigo;
+      ringColor = AppColors.indigo;
+      textColor = AppColors.indigo;
       if (style != null) bgColor = style.soft;
     } else if (style != null) {
       bgColor = style.soft;
@@ -563,7 +569,7 @@ class _DayCell extends StatelessWidget {
 
     final isSun = day.weekday == DateTime.sunday;
     if (!isSelected && !isToday && style == null && isSun) {
-      textColor = Colors.red.shade300;
+      textColor = AppColors.rose;
     }
 
     return Container(
@@ -603,13 +609,12 @@ class _DayPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final style = level != null ? _kStress[level] : null;
-    final color = style?.primary ?? DesignColor.muted;
+    final color = style?.primary ?? AppColors.textSecondary(context);
 
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 0, 12, 0),
-      decoration: DesignStyles.glassCard(),
+      decoration: AppStyles.glassCard(context),
       child: Column(children: [
         // Header
         Container(
@@ -618,7 +623,7 @@ class _DayPanel extends StatelessWidget {
             gradient: LinearGradient(
               colors: style != null
                   ? [color.withOpacity(0.2), color.withOpacity(0.05)]
-                  : [cs.surfaceContainerHighest.withOpacity(0.3), Colors.transparent],
+                  : [AppColors.surface(context).withOpacity(0.3), Colors.transparent],
               begin: Alignment.topLeft, end: Alignment.bottomRight,
             ),
             borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
@@ -655,7 +660,7 @@ class _DayPanel extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.all(24),
             child: Column(children: [
-              Icon(Icons.check_circle_outline, size: 40, color: const Color(0xFF00897B).withOpacity(0.6)),
+              Icon(Icons.check_circle_outline, size: 40, color: AppColors.green.withOpacity(0.6)),
               const SizedBox(height: 8),
               Text('Free day! 🎉', style: TextStyle(fontWeight: FontWeight.w700, color: cs.onSurface)),
               const SizedBox(height: 2),
@@ -749,17 +754,12 @@ class _MonthInsights extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final monthLabel = DateFormat('MMMM').format(focusedMonth);
 
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 0, 12, 0),
       padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1A1D27) : Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 12)],
-      ),
+      decoration: AppStyles.glassCard(context),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text('$monthLabel — tap a day to see events', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: cs.onSurface)),
         const SizedBox(height: 4),
@@ -797,21 +797,16 @@ class _EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 0, 12, 0),
       padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1A1D27) : Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 12)],
-      ),
+      decoration: AppStyles.glassCard(context),
       child: Column(children: [
         Container(
           width: 72, height: 72,
           decoration: BoxDecoration(
-            gradient: const LinearGradient(colors: [Color(0xFF3949AB), Color(0xFF5C6BC0)]),
+            gradient: const LinearGradient(colors: [AppColors.indigo, Color(0xFF5C6BC0)]),
             borderRadius: BorderRadius.circular(20),
           ),
           child: const Icon(Icons.email_rounded, color: Colors.white, size: 36),
@@ -829,12 +824,12 @@ class _EmptyState extends StatelessWidget {
         SizedBox(width: double.infinity, child: ElevatedButton(
           onPressed: onSync,
           style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.white,
-            foregroundColor: const Color(0xFF3C4043),
-            side: const BorderSide(color: Color(0xFFDADCE0)),
+            backgroundColor: AppColors.surface(context),
+            foregroundColor: AppColors.textPrimary(context),
+            side: BorderSide(color: AppColors.border(context)),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
             padding: const EdgeInsets.symmetric(vertical: 12),
-            elevation: 1,
+            elevation: 0,
           ),
           child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
             // Google colors G
@@ -850,7 +845,7 @@ class _EmptyState extends StatelessWidget {
               ],
             )),
             const SizedBox(width: 10),
-            const Text('Sign in with Google', style: TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF3C4043))),
+            Text('Sign in with Google', style: TextStyle(fontWeight: FontWeight.w600, color: AppColors.textPrimary(context))),
           ]),
         )),
         const SizedBox(height: 10),
@@ -901,12 +896,11 @@ class _AddEventSheetState extends State<_AddEventSheet> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final accent = _kStress[_stress]!.primary;
 
     return Container(
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1A1D27) : Colors.white,
+        color: AppColors.surface(context),
         borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
       ),
       padding: EdgeInsets.only(
@@ -934,8 +928,8 @@ class _AddEventSheetState extends State<_AddEventSheet> {
             labelText: 'Title *',
             prefixIcon: const Icon(Icons.title_rounded),
             filled: true,
-            fillColor: cs.surfaceContainerHighest.withOpacity(0.5),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+            fillColor: AppColors.surface(context),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: AppColors.border(context))),
           ),
         ),
         const SizedBox(height: 12),
@@ -979,8 +973,9 @@ class _AddEventSheetState extends State<_AddEventSheet> {
           child: Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: cs.surfaceContainerHighest.withOpacity(0.5),
+              color: AppColors.surface(context),
               borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppColors.border(context)),
             ),
             child: Row(children: [
               Icon(Icons.calendar_today_rounded, color: cs.primary, size: 18),
@@ -999,8 +994,8 @@ class _AddEventSheetState extends State<_AddEventSheet> {
             labelText: 'Note (optional)',
             prefixIcon: const Icon(Icons.notes_rounded),
             filled: true,
-            fillColor: cs.surfaceContainerHighest.withOpacity(0.5),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+            fillColor: AppColors.surface(context),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: AppColors.border(context))),
           ),
         ),
         const SizedBox(height: 20),
@@ -1053,12 +1048,15 @@ class _TokenDialog extends StatelessWidget {
       title: const Text('Google Access Token', style: TextStyle(fontWeight: FontWeight.w700)),
       content: Column(mainAxisSize: MainAxisSize.min, children: [
         Text('After Google sign-in, copy the access token and paste below.',
-          style: TextStyle(color: cs.outline, fontSize: 13)),
+          style: TextStyle(color: AppColors.textSecondary(context), fontSize: 13)),
         const SizedBox(height: 14),
         TextField(controller: ctrl, maxLines: 3,
           decoration: InputDecoration(
             hintText: 'ya29.a0...',
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            hintStyle: TextStyle(color: AppColors.textMuted(context)),
+            filled: true,
+            fillColor: AppColors.surface(context),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: AppColors.border(context))),
           )),
       ]),
       actions: [
@@ -1085,7 +1083,7 @@ class _RetryView extends StatelessWidget {
       const SizedBox(height: 12),
       const Text('Cannot load calendar', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
       const SizedBox(height: 6),
-      Text('Is the backend running?', style: TextStyle(color: cs.outline)),
+      Text('Is the backend running?', style: TextStyle(color: AppColors.textSecondary(context))),
       const SizedBox(height: 16),
       FilledButton.icon(onPressed: onRetry, icon: const Icon(Icons.refresh), label: const Text('Retry')),
     ]));

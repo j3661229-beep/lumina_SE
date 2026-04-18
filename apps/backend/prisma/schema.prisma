@@ -110,8 +110,9 @@ model Profile {
   rollNumber  String?  @map("roll_number")
   division    String?  @db.VarChar(10)
   batch       String?  @db.VarChar(10)
-  fcmToken    String?  @map("fcm_token")
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  fcmToken     String?  @map("fcm_token")
+  weeklyBudget Float?   @default(2000.0) @map("weekly_budget")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   subjects             Subject[]

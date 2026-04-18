@@ -18,8 +18,8 @@ class _TimetableScreenState extends ConsumerState<TimetableScreen> {
   static const _daysFull = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 
   static const List<Color> _slotPalette = [
-    DesignColor.indigo, DesignColor.green, DesignColor.amber,
-    Color(0xFFEC4899), DesignColor.cyan, DesignColor.violet, DesignColor.rose,
+    AppColors.indigo, AppColors.green, AppColors.amber,
+    Color(0xFFEC4899), AppColors.cyan, AppColors.violet, AppColors.rose,
   ];
 
   @override
@@ -42,22 +42,25 @@ class _TimetableScreenState extends ConsumerState<TimetableScreen> {
       barrierDismissible: false,
       builder: (ctx) => StatefulBuilder(builder: (ctx, setInnerState) {
         return Dialog(
-          backgroundColor: const Color(0xFF0F1228),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22), side: const BorderSide(color: DesignColor.borderH)),
+          backgroundColor: Theme.of(ctx).colorScheme.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(22), 
+            side: BorderSide(color: AppColors.indigo.withOpacity(0.4))
+          ),
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Column(mainAxisSize: MainAxisSize.min, children: [
-              const Icon(Icons.school_outlined, color: DesignColor.indigo, size: 40),
+              const Icon(Icons.school_outlined, color: AppColors.indigo, size: 40),
               const SizedBox(height: 16),
-              const Text('Welcome to Lumina', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'Syne')),
+              Text('Welcome to Lumina', style: TextStyle(color: Theme.of(ctx).colorScheme.onSurface, fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'Syne')),
               const SizedBox(height: 8),
-              const Text('Set your Division and Batch to auto-generate your timetable.', textAlign: TextAlign.center, style: TextStyle(color: DesignColor.sub, fontSize: 13)),
+              Text('Set your Division and Batch to auto-generate your timetable.', textAlign: TextAlign.center, style: TextStyle(color: Theme.of(ctx).colorScheme.onSurface.withOpacity(0.55), fontSize: 13)),
               const SizedBox(height: 24),
               Row(children: [
                 Expanded(child: DropdownButtonFormField<String>(
                   value: div,
-                  dropdownColor: const Color(0xFF0F1228),
-                  style: const TextStyle(color: Colors.white),
+                  dropdownColor: Theme.of(ctx).colorScheme.surface,
+                  style: TextStyle(color: Theme.of(ctx).colorScheme.onSurface),
                   decoration: const InputDecoration(labelText: 'Division', border: OutlineInputBorder()),
                   items: ['A', 'B', 'C', 'D'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
                   onChanged: (v) => setInnerState(() => div = v!),
@@ -65,8 +68,8 @@ class _TimetableScreenState extends ConsumerState<TimetableScreen> {
                 const SizedBox(width: 12),
                 Expanded(child: DropdownButtonFormField<String>(
                   value: batch,
-                  dropdownColor: const Color(0xFF0F1228),
-                  style: const TextStyle(color: Colors.white),
+                  dropdownColor: Theme.of(ctx).colorScheme.surface,
+                  style: TextStyle(color: Theme.of(ctx).colorScheme.onSurface),
                   decoration: const InputDecoration(labelText: 'Batch', border: OutlineInputBorder()),
                   items: ['A', 'B', 'C', 'D'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
                   onChanged: (v) => setInnerState(() => batch = v!),
@@ -81,7 +84,7 @@ class _TimetableScreenState extends ConsumerState<TimetableScreen> {
                     Navigator.pop(ctx);
                     ref.read(timetableProvider.notifier).updateProfileAndGenerate(div, batch);
                   },
-                  child: const Text('Generate Timetable'),
+                  child: const Text('Generate Timetable', style: TextStyle(color: Colors.white)),
                 ),
               )),
             ]),
@@ -107,9 +110,9 @@ class _TimetableScreenState extends ConsumerState<TimetableScreen> {
         child: Padding(
           padding: const EdgeInsets.all(32),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            const Icon(Icons.wifi_off_outlined, size: 48, color: DesignColor.rose),
+            const Icon(Icons.wifi_off_outlined, size: 48, color: AppColors.rose),
             const SizedBox(height: 12),
-            Text('$e', textAlign: TextAlign.center, style: const TextStyle(color: DesignColor.sub, fontSize: 13)),
+            Text('$e', textAlign: TextAlign.center, style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6), fontSize: 13)),
             const SizedBox(height: 16),
             Container(
               decoration: DesignStyles.gradientButton(),
@@ -135,9 +138,16 @@ class _TimetableScreenState extends ConsumerState<TimetableScreen> {
           final todayKey = DateFormat('EEEE').format(now).toLowerCase();
           final todaySlots = grouped[todayKey] ?? [];
 
-          // Summary stats
-          final double avgPct = slots.isEmpty ? 0 : 78;
-          final int bunksLeft = 2;
+          final analytics = ref.watch(bunkAnalyticsProvider).value ?? [];
+          final items = analytics.map((e) => e as Map<String, dynamic>).toList();
+          
+          double avgPct = 0;
+          int bunksLeft = 0;
+          
+          if (items.isNotEmpty) {
+            avgPct = items.map((e) => (e['percentage'] as num?)?.toDouble() ?? 0.0).reduce((a, b) => a + b) / items.length;
+            bunksLeft = items.map((e) => (e['bunks_remaining'] as num?)?.toInt() ?? 0).where((b) => b > 0).fold<int>(0, (a, b) => a + b);
+          }
 
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -157,8 +167,8 @@ class _TimetableScreenState extends ConsumerState<TimetableScreen> {
               // ── Today's timeline ────────────────────────────────────────
               Expanded(
                 child: RefreshIndicator(
-                  color: DesignColor.indigo,
-                  backgroundColor: const Color(0xFF0F1228),
+                  color: AppColors.indigo,
+                  backgroundColor: Theme.of(context).colorScheme.surface,
                   onRefresh: () async => ref.invalidate(timetableProvider),
                   child: ListView(
                   padding: const EdgeInsets.fromLTRB(18, 0, 18, 24),
@@ -174,18 +184,20 @@ class _TimetableScreenState extends ConsumerState<TimetableScreen> {
                           children: [
                             Text("Today's Schedule",
                               style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                fontFamily: 'Syne', fontWeight: FontWeight.w700, color: DesignColor.text)),
+                                fontFamily: 'Syne', fontWeight: FontWeight.w700,
+                              color: Theme.of(context).colorScheme.onSurface)),
                             GestureDetector(
                               onTap: () => context.go('/bunk'),
                               child: Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
                                 decoration: BoxDecoration(
-                                  color: DesignColor.s1,
+                                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.06),
                                   borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(color: DesignColor.border),
+                                  border: Border.all(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.1)),
                                 ),
-                                child: const Text('📊 Analytics',
-                                  style: TextStyle(color: DesignColor.sub, fontSize: 11, fontWeight: FontWeight.w600)),
+                                child: Text('📊 Analytics',
+                                  style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                                    fontSize: 11, fontWeight: FontWeight.w600)),
                               ),
                             ),
                           ],
@@ -194,11 +206,16 @@ class _TimetableScreenState extends ConsumerState<TimetableScreen> {
                       if (todaySlots.isEmpty)
                         Container(
                           padding: const EdgeInsets.all(14),
-                          decoration: DesignStyles.glassCard(),
-                          child: const Row(children: [
-                            Text('🎉', style: TextStyle(fontSize: 20)),
-                            SizedBox(width: 12),
-                            Text('Free day! No classes today.', style: TextStyle(color: DesignColor.sub, fontSize: 13)),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.04),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.08)),
+                          ),
+                          child: Row(children: [
+                            const Text('🎉', style: TextStyle(fontSize: 20)),
+                            const SizedBox(width: 12),
+                            Text('Free day! No classes today.',
+                              style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5), fontSize: 13)),
                           ]),
                         )
                       else
@@ -208,7 +225,8 @@ class _TimetableScreenState extends ConsumerState<TimetableScreen> {
                       const SizedBox(height: 20),
                       Text('All Days',
                         style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontFamily: 'Syne', fontWeight: FontWeight.w700, color: DesignColor.text)),
+                          fontFamily: 'Syne', fontWeight: FontWeight.w700,
+                          color: Theme.of(context).colorScheme.onSurface)),
                       const SizedBox(height: 12),
                       ...List.generate(_days.length, (i) {
                         final day = _daysFull[i];
@@ -238,30 +256,30 @@ class _TimetableScreenState extends ConsumerState<TimetableScreen> {
     showDialog(
       context: context,
       builder: (ctx) => Dialog(
-        backgroundColor: const Color(0xFF0F1228),
+        backgroundColor: Theme.of(context).colorScheme.surface,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(22),
-          side: const BorderSide(color: DesignColor.borderH),
+          side: BorderSide(color: AppColors.indigo.withOpacity(0.4)),
         ),
         child: Padding(
           padding: const EdgeInsets.all(22),
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Row(children: [
-              Icon(Icons.warning_amber_rounded, color: DesignColor.rose, size: 24),
+            Row(children: [
+              const Icon(Icons.warning_amber_rounded, color: AppColors.rose, size: 24),
               SizedBox(width: 10),
               Text('Delete Timetable?',
-                style: TextStyle(color: DesignColor.text, fontWeight: FontWeight.w700, fontSize: 16, fontFamily: 'Syne')),
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16, fontFamily: 'Syne')),
             ]),
             const SizedBox(height: 10),
             const Text('This will permanently delete all your classes, subjects, and attendance records. This cannot be undone.',
-              style: TextStyle(color: DesignColor.sub, fontSize: 13, height: 1.5)),
+              style: TextStyle(fontSize: 13, height: 1.5)),
             const SizedBox(height: 20),
             Row(children: [
               Expanded(child: OutlinedButton(
                 onPressed: () => Navigator.pop(ctx),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: DesignColor.sub,
-                  side: const BorderSide(color: DesignColor.border),
+                  foregroundColor: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                  side: BorderSide(color: AppColors.border(context)),
                   padding: const EdgeInsets.symmetric(vertical: 12),
                 ),
                 child: const Text('Cancel'),
@@ -273,7 +291,7 @@ class _TimetableScreenState extends ConsumerState<TimetableScreen> {
                   Navigator.pop(ctx);
                 },
                 style: FilledButton.styleFrom(
-                  backgroundColor: DesignColor.rose,
+                  backgroundColor: AppColors.rose,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 12),
                 ),
@@ -323,10 +341,10 @@ class _Header extends StatelessWidget {
         // Top row
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
           Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(todayLabel, style: const TextStyle(color: DesignColor.sub, fontSize: 12, fontWeight: FontWeight.w500)),
+            Text(todayLabel, style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5), fontSize: 12, fontWeight: FontWeight.w500)),
             const SizedBox(height: 4),
-            const Text('My Timetable',
-              style: TextStyle(color: DesignColor.text, fontSize: 22, fontWeight: FontWeight.w800, fontFamily: 'Syne')),
+            Text('My Timetable',
+              style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 22, fontWeight: FontWeight.w800, fontFamily: 'Syne')),
           ]),
           Row(children: [
             _HeaderBtn(icon: Icons.person_outline, onTap: () => context.push('/profile')),
@@ -337,18 +355,18 @@ class _Header extends StatelessWidget {
             _HeaderBtn(icon: Icons.analytics_outlined, onTap: onBunk),
             if (hasSlots) ...[
               const SizedBox(width: 8),
-              _HeaderBtn(icon: Icons.delete_outline, onTap: onDelete, color: DesignColor.rose),
+              _HeaderBtn(icon: Icons.delete_outline, onTap: onDelete, color: AppColors.rose),
             ],
           ]),
         ]),
         const SizedBox(height: 14),
         // Stats pills
         Row(children: [
-          _StatPill(emoji: '📚', label: 'Today', value: '$classesToday', color: DesignColor.indigo),
+          _StatPill(emoji: '📚', label: 'Today', value: '$classesToday', color: AppColors.indigo),
           const SizedBox(width: 10),
-          _StatPill(emoji: '✅', label: 'Avg Att.', value: '${avgAttendance.round()}%', color: DesignColor.green),
+          _StatPill(emoji: '✅', label: 'Avg Att.', value: '${avgAttendance.round()}%', color: AppColors.green),
           const SizedBox(width: 10),
-          _StatPill(emoji: '😈', label: 'Bunks Left', value: '$bunksLeft', color: DesignColor.amber),
+          _StatPill(emoji: '😈', label: 'Bunks Left', value: '$bunksLeft', color: AppColors.amber),
         ]),
       ]),
     );
@@ -358,8 +376,8 @@ class _Header extends StatelessWidget {
 class _HeaderBtn extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
-  final Color color;
-  const _HeaderBtn({required this.icon, required this.onTap, this.color = DesignColor.sub});
+  final Color? color;
+  const _HeaderBtn({required this.icon, required this.onTap, this.color});
 
   @override
   Widget build(BuildContext context) => GestureDetector(
@@ -367,10 +385,11 @@ class _HeaderBtn extends StatelessWidget {
     child: Container(
       width: 38, height: 38,
       decoration: BoxDecoration(
-        color: DesignColor.s1, borderRadius: BorderRadius.circular(11),
-        border: Border.all(color: DesignColor.border),
+        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(11),
+        border: Border.all(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.1)),
       ),
-      child: Icon(icon, color: color, size: 18),
+      child: Icon(icon, color: color ?? Theme.of(context).colorScheme.onSurface.withOpacity(0.5), size: 18),
     ),
   );
 }
@@ -385,14 +404,15 @@ class _StatPill extends StatelessWidget {
     child: Container(
       padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
       decoration: BoxDecoration(
-        color: DesignColor.s1, borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: DesignColor.border),
+        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.08)),
       ),
       child: Column(children: [
         Text(emoji, style: const TextStyle(fontSize: 16)),
         const SizedBox(height: 4),
         Text(value, style: TextStyle(color: color, fontSize: 18, fontWeight: FontWeight.w800, fontFamily: 'Syne')),
-        Text(label, style: const TextStyle(color: DesignColor.muted, fontSize: 9, fontWeight: FontWeight.w600)),
+        Text(label, style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4), fontSize: 9, fontWeight: FontWeight.w600)),
       ]),
     ),
   );
@@ -431,16 +451,16 @@ class _TimelineList extends ConsumerWidget {
             if (context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                 content: Text(status == 'present' ? '✅ Marked present' : '🚫 Marked absent'),
-                backgroundColor: status == 'present' ? DesignColor.green : DesignColor.rose,
+                backgroundColor: status == 'present' ? AppColors.green : AppColors.rose,
                 duration: const Duration(seconds: 1),
               ));
             }
           } catch (e) {
             debugPrint('[Timeline] mark failed: $e');
             if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                content: Text('Failed to save attendance: $e'),
-                backgroundColor: DesignColor.rose,
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                content: Text('Failed to save attendance'),
+                backgroundColor: AppColors.rose,
               ));
             }
           }
@@ -454,7 +474,7 @@ class _TimelineList extends ConsumerWidget {
               width: 52,
               child: Column(children: [
                 const SizedBox(height: 14),
-                Text(startTime, style: const TextStyle(color: DesignColor.muted, fontSize: 10, height: 1)),
+                Text(startTime, style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.35), fontSize: 10, height: 1)),
               ]),
             ),
             // Dot + line
@@ -489,9 +509,16 @@ class _TimelineList extends ConsumerWidget {
                   margin: const EdgeInsets.only(bottom: 8),
                   padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
                   decoration: BoxDecoration(
-                    color: DesignColor.s1,
+                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.05),
                     borderRadius: BorderRadius.circular(14),
                     border: Border(left: BorderSide(color: slotColor, width: 3)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: slotColor.withOpacity(0.07),
+                        blurRadius: 12,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
                   ),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Row(
@@ -499,9 +526,9 @@ class _TimelineList extends ConsumerWidget {
                     children: [
                       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                         Text(subject['name'] ?? 'Unknown',
-                          style: const TextStyle(color: DesignColor.text, fontWeight: FontWeight.w700, fontSize: 13, fontFamily: 'Syne')),
+                          style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontWeight: FontWeight.w700, fontSize: 13, fontFamily: 'Syne')),
                         Text('$startTime – $endTime · ${slotType[0].toUpperCase()}${slotType.substring(1)}',
-                          style: const TextStyle(color: DesignColor.muted, fontSize: 10, height: 1.5)),
+                          style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4), fontSize: 10, height: 1.5)),
                       ])),
                       _TypePill(label: slotType, color: slotColor),
                     ],
@@ -512,17 +539,17 @@ class _TimelineList extends ConsumerWidget {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(
-                        color: (marked == 'present' ? DesignColor.green : DesignColor.rose).withOpacity(0.12),
+                        color: (marked == 'present' ? AppColors.green : AppColors.rose).withOpacity(0.12),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Row(mainAxisSize: MainAxisSize.min, children: [
                         Icon(marked == 'present' ? Icons.check_circle_outline : Icons.cancel_outlined,
-                          size: 13, color: marked == 'present' ? DesignColor.green : DesignColor.rose),
+                          size: 13, color: marked == 'present' ? AppColors.green : AppColors.rose),
                         const SizedBox(width: 5),
                         Text(marked == 'present' ? 'Marked Present' : 'Marked Absent',
                           style: TextStyle(
                             fontSize: 11, fontWeight: FontWeight.w600,
-                            color: marked == 'present' ? DesignColor.green : DesignColor.rose)),
+                            color: marked == 'present' ? AppColors.green : AppColors.rose)),
                       ]),
                     )
                   else
@@ -532,14 +559,14 @@ class _TimelineList extends ConsumerWidget {
                         child: Container(
                           padding: const EdgeInsets.symmetric(vertical: 6),
                           decoration: BoxDecoration(
-                            color: DesignColor.green.withOpacity(0.12),
+                            color: AppColors.green.withOpacity(0.12),
                             borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: DesignColor.green.withOpacity(0.3)),
+                            border: Border.all(color: AppColors.green.withOpacity(0.3)),
                           ),
                           child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                            Icon(Icons.check_rounded, size: 13, color: DesignColor.green),
+                            Icon(Icons.check_rounded, size: 13, color: AppColors.green),
                             SizedBox(width: 4),
-                            Text('Present', style: TextStyle(color: DesignColor.green, fontSize: 11, fontWeight: FontWeight.w700)),
+                            Text('Present', style: TextStyle(color: AppColors.green, fontSize: 11, fontWeight: FontWeight.w700)),
                           ]),
                         ),
                       )),
@@ -549,14 +576,14 @@ class _TimelineList extends ConsumerWidget {
                         child: Container(
                           padding: const EdgeInsets.symmetric(vertical: 6),
                           decoration: BoxDecoration(
-                            color: DesignColor.rose.withOpacity(0.12),
+                            color: AppColors.rose.withOpacity(0.12),
                             borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: DesignColor.rose.withOpacity(0.3)),
+                            border: Border.all(color: AppColors.rose.withOpacity(0.3)),
                           ),
                           child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                            Icon(Icons.close_rounded, size: 13, color: DesignColor.rose),
+                            Icon(Icons.close_rounded, size: 13, color: AppColors.rose),
                             SizedBox(width: 4),
-                            Text('Bunk', style: TextStyle(color: DesignColor.rose, fontSize: 11, fontWeight: FontWeight.w700)),
+                            Text('Bunk', style: TextStyle(color: AppColors.rose, fontSize: 11, fontWeight: FontWeight.w700)),
                           ]),
                         ),
                       )),
@@ -609,23 +636,27 @@ class _DaySection extends ConsumerWidget {
           Container(
             width: 44, height: 44,
             decoration: BoxDecoration(
-              color: isToday ? DesignColor.indigoGlow : DesignColor.s1,
+              color: isToday ? AppColors.indigo.withOpacity(0.15) : Theme.of(context).colorScheme.onSurface.withOpacity(0.06),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: isToday ? DesignColor.borderH : DesignColor.border),
+              border: Border.all(color: isToday ? AppColors.indigo.withOpacity(0.4) : Theme.of(context).colorScheme.onSurface.withOpacity(0.1)),
             ),
             child: Center(child: Text(dayAbbr,
-              style: TextStyle(color: isToday ? DesignColor.indigo : DesignColor.sub,
+              style: TextStyle(color: isToday ? AppColors.indigo : Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
                 fontWeight: FontWeight.w800, fontSize: 12, fontFamily: 'Syne'))),
           ),
           const SizedBox(width: 10),
           Text('${slots.length} class${slots.length == 1 ? '' : 'es'}',
-            style: const TextStyle(color: DesignColor.sub, fontSize: 12)),
+            style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5), fontSize: 12)),
           if (isToday) ...[
             const SizedBox(width: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(color: DesignColor.indigoGlow, borderRadius: BorderRadius.circular(10)),
-              child: const Text('Today', style: TextStyle(color: DesignColor.indigo, fontSize: 9, fontWeight: FontWeight.w700)),
+              decoration: BoxDecoration(
+                color: AppColors.indigo.withOpacity(0.12), 
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.indigo.withOpacity(0.2)),
+              ),
+              child: const Text('Today', style: TextStyle(color: AppColors.indigo, fontSize: 9, fontWeight: FontWeight.w700)),
             ),
           ],
         ]),
@@ -634,13 +665,13 @@ class _DaySection extends ConsumerWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             decoration: BoxDecoration(
-              color: DesignColor.s1.withOpacity(0.5),
+              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.04),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Row(children: [
-              Icon(Icons.free_breakfast_outlined, color: DesignColor.muted, size: 16),
-              SizedBox(width: 8),
-              Text('Free day 🎉', style: TextStyle(color: DesignColor.muted, fontSize: 12)),
+            child: Row(children: [
+              Icon(Icons.free_breakfast_outlined, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.3), size: 16),
+              const SizedBox(width: 8),
+              Text('Free day 🎉', style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4), fontSize: 12)),
             ]),
           )
         else
@@ -659,7 +690,7 @@ class _DaySection extends ConsumerWidget {
                 margin: const EdgeInsets.only(bottom: 6),
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 decoration: BoxDecoration(
-                  color: DesignColor.s1,
+                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.05),
                   borderRadius: BorderRadius.circular(12),
                   border: Border(left: BorderSide(color: slotColor, width: 3)),
                 ),
@@ -668,9 +699,9 @@ class _DaySection extends ConsumerWidget {
                   children: [
                   Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Text(subject['name'] ?? 'Unknown',
-                      style: const TextStyle(color: DesignColor.text, fontWeight: FontWeight.w600, fontSize: 13)),
+                      style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontWeight: FontWeight.w600, fontSize: 13)),
                     Text('${slot['start_time']} – ${slot['end_time']}',
-                      style: const TextStyle(color: DesignColor.muted, fontSize: 10, height: 1.5)),
+                      style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4), fontSize: 10, height: 1.5)),
                   ])),
                   _TypePill(label: slotType, color: slotColor),
                 ],
@@ -694,15 +725,18 @@ class _EmptyTimetable extends StatelessWidget {
       const SizedBox(height: 40),
       Container(
         padding: const EdgeInsets.all(28),
-        decoration: const BoxDecoration(shape: BoxShape.circle, color: DesignColor.indigoGlow),
-        child: const Icon(Icons.calendar_view_week_outlined, color: DesignColor.indigo, size: 48),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle, 
+          color: AppColors.indigo.withOpacity(context.isDark ? 0.15 : 0.08)
+        ),
+        child: const Icon(Icons.calendar_view_week_outlined, color: AppColors.indigo, size: 48),
       ),
       const SizedBox(height: 20),
-      const Text('No Timetable Yet',
-        style: TextStyle(color: DesignColor.text, fontWeight: FontWeight.w800, fontSize: 18, fontFamily: 'Syne')),
+      Text('No Timetable Yet',
+        style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontWeight: FontWeight.w800, fontSize: 18, fontFamily: 'Syne')),
       const SizedBox(height: 8),
-      const Text('Upload a photo or PDF of your class schedule and Gemini AI will extract all slots automatically.',
-        textAlign: TextAlign.center, style: TextStyle(color: DesignColor.sub, fontSize: 13, height: 1.5)),
+      Text('Upload a photo or PDF of your class schedule and Gemini AI will extract all slots automatically.',
+        textAlign: TextAlign.center, style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5), fontSize: 13, height: 1.5)),
       const SizedBox(height: 24),
       GestureDetector(
         onTap: onScan,

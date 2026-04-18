@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/theme/design_tokens.dart';
 
 class PasteboardScreen extends StatefulWidget {
   final String groupId;
@@ -73,15 +74,25 @@ class _PasteboardScreenState extends State<PasteboardScreen> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     return Scaffold(
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
+          icon: Icon(Icons.arrow_back_ios_new_rounded, color: cs.onSurface),
           onPressed: () => context.canPop() ? context.pop() : context.go('/groups'),
         ),
-        title: const Text('Pasteboard'),
-        backgroundColor: Theme.of(context).colorScheme.surface,
+        title: const Text('Whiteboard', style: TextStyle(fontFamily: 'Syne', fontWeight: FontWeight.w800)),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
       ),
-      floatingActionButton: FloatingActionButton(onPressed: _addItem, child: const Icon(Icons.add)),
+      floatingActionButton: Container(
+        decoration: AppStyles.gradientButton(),
+        child: FloatingActionButton(
+          onPressed: _addItem,
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          child: const Icon(Icons.add_rounded, color: Colors.white),
+        ),
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _items.isEmpty
@@ -94,48 +105,64 @@ class _PasteboardScreenState extends State<PasteboardScreen> {
                   padding: const EdgeInsets.all(16),
                   itemCount: _items.length,
                   separatorBuilder: (_, __) => const SizedBox(height: 10),
-                  itemBuilder: (ctx, i) {
-                    final item = _items[i];
-                    final isCode = item['language'] != null;
-                    return Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(14),
+                    itemBuilder: (ctx, i) {
+                      final item = _items[i];
+                      final isCode = item['language'] != null;
+                      return Container(
+                        decoration: AppStyles.glassCard(context),
+                        padding: const EdgeInsets.all(16),
                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           if (item['title'] != null)
-                            Text(item['title'], style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-                          if (item['title'] != null) const SizedBox(height: 6),
+                            Text(item['title'], style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16, fontFamily: 'Syne')),
+                          if (item['title'] != null) const SizedBox(height: 8),
                           if (isCode)
                             Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(color: const Color(0xFF1E1E2E), borderRadius: BorderRadius.circular(8)),
+                              padding: const EdgeInsets.all(12),
+                              width: double.infinity,
+                              decoration: BoxDecoration(
+                                color: context.isDark ? Colors.black26 : const Color(0xFFF1F5F9),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: AppColors.border(context)),
+                              ),
                               child: Text(item['content'],
-                                style: const TextStyle(fontFamily: 'monospace', color: Color(0xFF50FA7B), fontSize: 12)),
+                                style: TextStyle(
+                                  fontFamily: 'monospace', 
+                                  color: context.isDark ? AppColors.green : AppColors.indigo, 
+                                  fontSize: 12, height: 1.5)),
                             )
                           else
-                            Text(item['content']),
-                          const SizedBox(height: 8),
+                            Text(item['content'], style: const TextStyle(height: 1.5)),
+                          const SizedBox(height: 12),
                           Row(children: [
-                            Icon(Icons.person_outline, size: 13, color: cs.outline),
-                            const SizedBox(width: 4),
-                            Text(item['author_id']?.toString().substring(0, 6) ?? '', style: TextStyle(fontSize: 12, color: cs.outline)),
+                            Icon(Icons.person_outline_rounded, size: 14, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4)),
+                            const SizedBox(width: 6),
+                            Text('By ${item['author_id']?.toString().substring(0, 6)}', 
+                              style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4))),
                             if (isCode) ...[
-                              const SizedBox(width: 10),
-                              Chip(label: Text(item['language'], style: const TextStyle(fontSize: 11)), visualDensity: VisualDensity.compact),
+                              const SizedBox(width: 12),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: AppColors.indigo.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text((item['language'] as String).toUpperCase(), 
+                                  style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: AppColors.indigo)),
+                              ),
                             ],
                             const Spacer(),
                             IconButton(
-                              icon: Icon(Icons.copy_outlined, size: 16, color: cs.primary),
+                              icon: Icon(Icons.copy_all_rounded, size: 18, color: AppColors.indigo),
                               onPressed: () {
                                 Clipboard.setData(ClipboardData(text: item['content'] as String));
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Copied!'), duration: Duration(seconds: 1)));
+                                  const SnackBar(content: Text('Copied to clipboard!'), behavior: SnackBarBehavior.floating));
                               },
                             ),
                           ]),
                         ]),
-                      ),
-                    );
-                  },
+                      );
+                    },
                 ),
     );
   }

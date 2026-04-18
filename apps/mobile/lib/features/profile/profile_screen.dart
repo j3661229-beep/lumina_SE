@@ -25,6 +25,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _rollNumberCtrl = TextEditingController();
   final _divisionCtrl = TextEditingController();
   final _batchCtrl = TextEditingController();
+  final _budgetCtrl = TextEditingController();
 
   @override
   void initState() {
@@ -43,6 +44,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _rollNumberCtrl.text = res['rollNumber'] ?? '';
         _divisionCtrl.text = res['division'] ?? '';
         _batchCtrl.text = res['batch'] ?? '';
+        _budgetCtrl.text = res['weeklyBudget']?.toString() ?? '2000.0';
       }
     } catch (e) {
       debugPrint('Profile load error: $e');
@@ -63,16 +65,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
         'rollNumber': _rollNumberCtrl.text.trim(),
         'division': _divisionCtrl.text.trim(),
         'batch': _batchCtrl.text.trim(),
+        'weeklyBudget': _budgetCtrl.text.trim(),
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Profile updated successfully!'), backgroundColor: DesignColor.green),
+          SnackBar(content: const Text('Profile updated successfully!'), backgroundColor: AppColors.green),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to update: $e'), backgroundColor: DesignColor.rose),
+          SnackBar(content: Text('Failed to update: $e'), backgroundColor: AppColors.rose),
         );
       }
     } finally {
@@ -87,28 +90,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = context.isDark;
+
     return Scaffold(
-      backgroundColor: const Color(0xFF0F0F1A),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1A1A2E),
-        title: const Text('My Profile', style: TextStyle(fontWeight: FontWeight.w700)),
+        backgroundColor: AppColors.surface(context),
+        elevation: 0,
+        surfaceTintColor: Colors.transparent,
+        title: Text('My Profile', style: TextStyle(fontWeight: FontWeight.w800, color: cs.onSurface)),
         actions: [
           IconButton(
-            icon: const Icon(Icons.logout, color: DesignColor.rose),
+            icon: const Icon(Icons.logout, color: AppColors.rose),
             onPressed: () => showDialog(
               context: context,
               builder: (ctx) => AlertDialog(
-                backgroundColor: const Color(0xFF1A1A2E),
-                title: const Text('Sign Out', style: TextStyle(color: Colors.white)),
-                content: const Text('Are you sure you want to sign out?', style: TextStyle(color: DesignColor.sub)),
+                backgroundColor: AppColors.surface(context),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                title: Text('Sign Out', style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w700)),
+                content: Text('Are you sure you want to sign out?', style: TextStyle(color: cs.onSurface.withOpacity(0.7))),
                 actions: [
-                  TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx), 
+                    child: Text('Cancel', style: TextStyle(color: cs.onSurface.withOpacity(0.6)))
+                  ),
                   TextButton(
                     onPressed: () {
                       Navigator.pop(ctx);
                       _signOut();
                     },
-                    child: const Text('Sign Out', style: TextStyle(color: DesignColor.rose)),
+                    child: const Text('Sign Out', style: TextStyle(color: AppColors.rose, fontWeight: FontWeight.bold)),
                   ),
                 ],
               ),
@@ -125,35 +137,45 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Center(
-                      child: CircleAvatar(
-                        radius: 40,
-                        backgroundColor: DesignColor.indigo,
-                        child: Icon(Icons.person, size: 40, color: Colors.white),
+                    Center(
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: isDark ? AppColors.indigo.withOpacity(0.15) : AppColors.indigo.withOpacity(0.08),
+                          border: Border.all(color: AppColors.indigo.withOpacity(0.3), width: 2),
+                        ),
+                        child: const CircleAvatar(
+                          radius: 40,
+                          backgroundColor: Colors.transparent,
+                          child: Icon(Icons.person, size: 40, color: AppColors.indigo),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 32),
-                    _buildField('Display Name', _displayNameCtrl, icon: Icons.badge_outlined),
+                    _buildField('Display Name', _displayNameCtrl, icon: Icons.badge_outlined, context: context),
                     const SizedBox(height: 16),
-                    _buildField('College / University', _collegeCtrl, icon: Icons.account_balance_outlined),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(child: _buildField('Branch', _branchCtrl, icon: Icons.library_books_outlined)),
-                        const SizedBox(width: 16),
-                        Expanded(child: _buildField('Year', _yearCtrl, icon: Icons.calendar_today_outlined, isNumber: true)),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    _buildField('Roll Number', _rollNumberCtrl, icon: Icons.pin_outlined),
+                    _buildField('College / University', _collegeCtrl, icon: Icons.account_balance_outlined, context: context),
                     const SizedBox(height: 16),
                     Row(
                       children: [
-                        Expanded(child: _buildField('Division', _divisionCtrl, icon: Icons.class_outlined)),
+                        Expanded(child: _buildField('Branch', _branchCtrl, icon: Icons.library_books_outlined, context: context)),
                         const SizedBox(width: 16),
-                        Expanded(child: _buildField('Batch', _batchCtrl, icon: Icons.group_outlined)),
+                        Expanded(child: _buildField('Year', _yearCtrl, icon: Icons.calendar_today_outlined, isNumber: true, context: context)),
                       ],
                     ),
+                    const SizedBox(height: 16),
+                    _buildField('Roll Number', _rollNumberCtrl, icon: Icons.pin_outlined, context: context),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(child: _buildField('Division', _divisionCtrl, icon: Icons.class_outlined, context: context)),
+                        const SizedBox(width: 16),
+                        Expanded(child: _buildField('Batch', _batchCtrl, icon: Icons.group_outlined, context: context)),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    _buildField('Weekly Budget (₹)', _budgetCtrl, icon: Icons.account_balance_wallet_outlined, isNumber: true, context: context),
                     const SizedBox(height: 32),
                     SizedBox(
                       width: double.infinity,
@@ -179,18 +201,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildField(String label, TextEditingController controller, {required IconData icon, bool isNumber = false}) {
+  Widget _buildField(String label, TextEditingController controller, {required IconData icon, bool isNumber = false, required BuildContext context}) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = context.isDark;
+    
     return TextFormField(
       controller: controller,
-      style: const TextStyle(color: Colors.white),
+      style: TextStyle(color: cs.onSurface),
       keyboardType: isNumber ? TextInputType.number : TextInputType.text,
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(color: DesignColor.sub),
-        prefixIcon: Icon(icon, color: DesignColor.sub),
+        labelStyle: TextStyle(color: cs.onSurface.withOpacity(0.5)),
+        prefixIcon: Icon(icon, color: cs.onSurface.withOpacity(0.4)),
         filled: true,
-        fillColor: const Color(0xFF1E1E2E), // slightly lighter than bg
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+        fillColor: AppColors.surface(context), // dynamic field background
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12), 
+          borderSide: BorderSide(color: AppColors.border(context))
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12), 
+          borderSide: const BorderSide(color: AppColors.indigo, width: 2)
+        ),
       ),
     );
   }

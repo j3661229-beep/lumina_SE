@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_drawing_board/flutter_drawing_board.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/theme/design_tokens.dart';
 
 class WhiteboardScreen extends StatefulWidget {
   final String groupId;
@@ -31,7 +32,7 @@ class _WhiteboardScreenState extends State<WhiteboardScreen> {
       await _supabase.from('messages').insert({
         'group_id': widget.groupId,
         'sender_id': user.id,
-        'content': '$name opened the Whiteboard 🎨',
+        'content': '$name opened the Whiteboard \u{1F3A8}',
         'message_type': 'whiteboard',
         'metadata': {
           'action': 'whiteboard_open',
@@ -42,15 +43,6 @@ class _WhiteboardScreenState extends State<WhiteboardScreen> {
     } catch (_) {}
   }
 
-  Future<void> _saveStroke(dynamic strokeData) async {
-    await _supabase.from('whiteboard_strokes').insert({
-      'group_id': widget.groupId,
-      'session_id': _sessionId,
-      'author_id': _supabase.auth.currentUser!.id,
-      'stroke_data': strokeData,
-    });
-  }
-
   @override
   void dispose() {
     _drawingController.dispose();
@@ -59,26 +51,26 @@ class _WhiteboardScreenState extends State<WhiteboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     return Scaffold(
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
+          icon: Icon(Icons.arrow_back_ios_new_rounded, color: Theme.of(context).colorScheme.onSurface),
           onPressed: () => context.canPop() ? context.pop() : context.go('/groups'),
         ),
-        title: const Text('Whiteboard'),
-        backgroundColor: Theme.of(context).colorScheme.surface,
+        title: const Text('Whiteboard', style: TextStyle(fontFamily: 'Syne', fontWeight: FontWeight.w800)),
+        backgroundColor: Colors.transparent,
         actions: [
           IconButton(
-            icon: const Icon(Icons.undo),
+            icon: const Icon(Icons.undo_rounded),
             onPressed: () => _drawingController.undo(),
           ),
           IconButton(
-            icon: const Icon(Icons.redo),
+            icon: const Icon(Icons.redo_rounded),
             onPressed: () => _drawingController.redo(),
           ),
           IconButton(
-            icon: const Icon(Icons.delete_outline),
+            icon: const Icon(Icons.delete_outline_rounded),
             onPressed: () => showDialog(
               context: context,
               builder: (ctx) => AlertDialog(
@@ -99,7 +91,7 @@ class _WhiteboardScreenState extends State<WhiteboardScreen> {
         controller: _drawingController,
         background: Container(
           color: Theme.of(context).brightness == Brightness.dark
-              ? const Color(0xFF1A1A2E)
+              ? const Color(0xFF101218)
               : Colors.white,
         ),
         showDefaultActions: true,

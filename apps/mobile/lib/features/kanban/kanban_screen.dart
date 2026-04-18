@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/theme/design_tokens.dart';
 import '../../shared/widgets/shimmer_widgets.dart';
 
 enum KanbanCol { backlog, todo, doing, done }
@@ -181,12 +182,13 @@ class _KanbanScreenState extends ConsumerState<KanbanScreen> {
       backgroundColor: Colors.transparent,
       builder: (ctx) => StatefulBuilder(builder: (ctx2, setModal) => Container(
         decoration: BoxDecoration(
-          color: cs.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          color: Theme.of(context).scaffoldBackgroundColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+          border: Border.all(color: AppColors.border(context)),
         ),
         padding: EdgeInsets.only(
-          bottom: MediaQuery.of(ctx2).viewInsets.bottom + 20,
-          left: 20, right: 20, top: 20,
+          bottom: MediaQuery.of(ctx2).viewInsets.bottom + 32,
+          left: 24, right: 24, top: 24,
         ),
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
@@ -513,13 +515,11 @@ class _MyTasksKanbanScreenState extends ConsumerState<MyTasksKanbanScreen> {
           : ListView(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.all(16),
-              children: KanbanCol.values.map((col) => _KanbanColumn(
+              children: KanbanCol.values.map<Widget>((col) => _KanbanColumn(
                 col: col,
                 tasks: _tasks[col]!,
                 onDrop: (task) => _editTask(task, {'status': col.name}),
-                onDelete: null,
                 onTap: _openTaskDetail,
-                showGroupBadge: true,
               )).toList(),
             ),
     );
