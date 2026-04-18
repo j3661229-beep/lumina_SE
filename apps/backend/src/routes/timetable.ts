@@ -220,6 +220,84 @@ router.get('/slots', requireAuth, async (req: AuthRequest, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────
+// PUT /api/timetable/slots/:id — Update individual slot
+// ─────────────────────────────────────────────────────────────
+router.put(
+  '/slots/:id',
+  requireAuth,
+  body('subject_name').isString().trim().notEmpty(),
+  body('day_of_week').isIn(Object.values(DayOfWeek)),
+  body('start_time').matches(/^\d{2}:\d{2}$/),
+  body('end_time').matches(/^\d{2}:\d{2}$/),
+  async (req: AuthRequest, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(422).json({ errors: errors.array() });
+
+    const userId = req.userId!;
+    const slotId = req.params.id;
+    const { subject_name, day_of_week, start_time, end_time, room, slot_type } = req.body;
+
+    // Ensure slot belongs to user
+    const existing = await prisma.timetableSlot.findFirst({
+      where: { id: slotId, userId }
+    });
+    if (!existing) return res.status(404).json({ error: 'Slot not found' });
+
+    // Upsert subject
+    const subject = await prisma.subject.upsert({
+      where: { userId_name: { userId, name: subject_name } },
+      create: { userId, name: subject_name },
+      update: {},
+      select: { id: true },
+    });
+
+    const updated = await prisma.timetableSlot.update({
+      where: { id: slotId },
+      data: {
+        subjectId: subject.id,
+        dayOfWeek: day_of_week,
+        startTime: start_time,
+        endTime: end_time,
+        room: room ?? null,
+        slotType: slot_type ?? 'lecture',
+      }
+    });
+
+    return res.json(updated);
+  }
+);
+
+// ─────────────────────────────────────────────────────────────
+// DELETE /api/timetable/slots/:id — Delete individual slot
+// ─────────────────────────────────────────────────────────────
+router.delete('/slots/:id', requireAuth, async (req: AuthRequest, res) => {
+  const userId = req.userId!;
+  const slotId = req.params.id;
+
+  const existing = await prisma.timetableSlot.findFirst({
+    where: { id: slotId, userId }
+  });
+  if (!existing) return res.status(404).json({ error: 'Slot not found' });
+
+  await prisma.timetableSlot.delete({
+    where: { id: slotId }
+  });
+
+  return res.json({ message: 'Slot deleted successfully.' });
+});
+
+// ─────────────────────────────────────────────────────────────
+// GET /api/timetable/attendance — Fetch all attendance logs
+// ─────────────────────────────────────────────────────────────
+router.get('/attendance', requireAuth, async (req: AuthRequest, res) => {
+  const logs = await prisma.attendanceLog.findMany({
+    where: { userId: req.userId! },
+    select: { slotId: true, date: true, status: true }
+  });
+  return res.json(logs);
+});
+
+// ─────────────────────────────────────────────────────────────
 // POST /api/timetable/attendance — Mark attendance for a slot
 // ─────────────────────────────────────────────────────────────
 router.post(

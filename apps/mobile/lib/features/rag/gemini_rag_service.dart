@@ -6,7 +6,8 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 /// - text-embedding-004 for generating 768-dim vectors
 /// - gemini-1.5-flash for synthesising answers from retrieved chunks
 class GeminiRagService {
-  static const _apiKey = 'AIzaSyA28U_YTWIZxXWxSCj2gxESlKG_3nGMo-A';
+  static const _apiKey = String.fromEnvironment('GEMINI_API_KEY',
+      defaultValue: 'ERROR_API_KEY_NOT_CONFIGURED');
   static const _embedUrl =
       'https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent';
   static const _chatUrl =

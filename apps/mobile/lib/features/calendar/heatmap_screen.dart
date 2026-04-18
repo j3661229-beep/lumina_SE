@@ -7,7 +7,6 @@ import 'dart:async';
 import '../../core/network/api_client.dart';
 import '../../core/theme/design_tokens.dart';
 import '../../shared/widgets/shimmer_widgets.dart';
-import '../../shared/widgets/app_card.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Provider
@@ -480,10 +479,9 @@ class _CalendarCard extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return AppCard(
+    return Container(
       margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-      glass: true,
-      padding: EdgeInsets.zero,
+      decoration: DesignStyles.glassCard(),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
         child: TableCalendar(
@@ -512,15 +510,15 @@ class _CalendarCard extends StatelessWidget {
               child: Text('${day.day}', style: TextStyle(color: cs.outline.withOpacity(0.35), fontSize: 13))),
             markerBuilder: (_, __, ___) => const SizedBox.shrink(),
           ),
-          headerStyle: HeaderStyle(
+          headerStyle: const HeaderStyle(
             formatButtonVisible: false,
             titleCentered: true,
-            leftChevronIcon: Icon(Icons.chevron_left_rounded, color: cs.onSurface),
-            rightChevronIcon: Icon(Icons.chevron_right_rounded, color: cs.onSurface),
-            titleTextStyle: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: cs.onSurface),
-            headerPadding: const EdgeInsets.symmetric(vertical: 10),
+            leftChevronIcon: Icon(Icons.chevron_left_rounded, color: DesignColor.sub),
+            rightChevronIcon: Icon(Icons.chevron_right_rounded, color: DesignColor.sub),
+            titleTextStyle: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: DesignColor.text, fontFamily: 'Syne'),
+            headerPadding: EdgeInsets.symmetric(vertical: 10),
             decoration: BoxDecoration(
-              border: Border(bottom: BorderSide(color: cs.onSurface.withOpacity(0.05))),
+              border: Border(bottom: BorderSide(color: DesignColor.border)),
             ),
           ),
           calendarStyle: const CalendarStyle(outsideDaysVisible: false),

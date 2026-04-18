@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../core/theme/design_tokens.dart';
 import '../../shared/widgets/shimmer_widgets.dart';
 import 'timetable_provider.dart';
+import 'edit_slot_sheet.dart';
 
 class TimetableScreen extends ConsumerStatefulWidget {
   const TimetableScreen({super.key});
@@ -20,8 +21,6 @@ class _TimetableScreenState extends ConsumerState<TimetableScreen> {
     DesignColor.indigo, DesignColor.green, DesignColor.amber,
     Color(0xFFEC4899), DesignColor.cyan, DesignColor.violet, DesignColor.rose,
   ];
-
-  final _markedToday = <String, String>{};  // slotId → 'present'|'absent'
 
   @override
   void initState() {
@@ -92,21 +91,7 @@ class _TimetableScreenState extends ConsumerState<TimetableScreen> {
     );
   }
 
-  Future<void> _markAttendance(String slotId, String status) async {
-    try {
-      await ref.read(timetableProvider.notifier).markAttendance(
-        slotId, DateFormat('yyyy-MM-dd').format(DateTime.now()), status);
-      if (mounted) {
-        setState(() => _markedToday[slotId] = status);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(status == 'present' ? '✅ Marked present' : '🚫 Marked absent'),
-          backgroundColor: status == 'present' ? DesignColor.green : DesignColor.rose,
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 1),
-        ));
-      }
-    } catch (_) {}
-  }
+  // _markAttendance removed, now using TimetableNotifier directly
 
   @override
   Widget build(BuildContext context) {
@@ -217,7 +202,7 @@ class _TimetableScreenState extends ConsumerState<TimetableScreen> {
                           ]),
                         )
                       else
-                        _TimelineList(slots: todaySlots, palette: _slotPalette, markedToday: _markedToday, onMark: _markAttendance),
+                        _TimelineList(slots: todaySlots, palette: _slotPalette),
 
                       // ── Rest of week ──────────────────────────────────
                       const SizedBox(height: 20),
@@ -414,15 +399,13 @@ class _StatPill extends StatelessWidget {
 }
 
 // ── Timeline list for today's slots ──────────────────────────────────────────
-class _TimelineList extends StatelessWidget {
+class _TimelineList extends ConsumerWidget {
   final List<dynamic> slots;
   final List<Color> palette;
-  final Map<String, String> markedToday;
-  final Future<void> Function(String slotId, String status) onMark;
-  const _TimelineList({required this.slots, required this.palette, required this.markedToday, required this.onMark});
+  const _TimelineList({required this.slots, required this.palette});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Column(
       children: List.generate(slots.length, (i) {
         final slot = slots[i];
@@ -438,7 +421,30 @@ class _TimelineList extends StatelessWidget {
         final slotType = slot['slot_type'] as String? ?? 'Lecture';
         final startTime = slot['start_time'] as String? ?? '';
         final endTime = slot['end_time'] as String? ?? '';
-        final marked = markedToday[slotId];
+        final String todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+        final logsMap = ref.watch(attendanceLogsProvider).value ?? {};
+        final marked = logsMap['${slotId}_$todayStr'];
+
+        Future<void> handleMark(String status) async {
+          try {
+            await ref.read(timetableProvider.notifier).markAttendance(slotId, todayStr, status);
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                content: Text(status == 'present' ? '✅ Marked present' : '🚫 Marked absent'),
+                backgroundColor: status == 'present' ? DesignColor.green : DesignColor.rose,
+                duration: const Duration(seconds: 1),
+              ));
+            }
+          } catch (e) {
+            debugPrint('[Timeline] mark failed: $e');
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                content: Text('Failed to save attendance: $e'),
+                backgroundColor: DesignColor.rose,
+              ));
+            }
+          }
+        }
 
         return Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -477,16 +483,18 @@ class _TimelineList extends StatelessWidget {
             const SizedBox(width: 10),
             // Card
             Expanded(
-              child: Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
-                decoration: BoxDecoration(
-                  color: DesignColor.s1,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border(left: BorderSide(color: slotColor, width: 3)),
-                ),
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Row(
+              child: GestureDetector(
+                onTap: () => showEditSlotSheet(context, ref, slot),
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
+                  decoration: BoxDecoration(
+                    color: DesignColor.s1,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border(left: BorderSide(color: slotColor, width: 3)),
+                  ),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -520,7 +528,7 @@ class _TimelineList extends StatelessWidget {
                   else
                     Row(children: [
                       Expanded(child: GestureDetector(
-                        onTap: slotId.isEmpty ? null : () => onMark(slotId, 'present'),
+                        onTap: slotId.isEmpty ? null : () => handleMark('present'),
                         child: Container(
                           padding: const EdgeInsets.symmetric(vertical: 6),
                           decoration: BoxDecoration(
@@ -537,7 +545,7 @@ class _TimelineList extends StatelessWidget {
                       )),
                       const SizedBox(width: 8),
                       Expanded(child: GestureDetector(
-                        onTap: slotId.isEmpty ? null : () => onMark(slotId, 'absent'),
+                        onTap: slotId.isEmpty ? null : () => handleMark('absent'),
                         child: Container(
                           padding: const EdgeInsets.symmetric(vertical: 6),
                           decoration: BoxDecoration(
@@ -554,6 +562,7 @@ class _TimelineList extends StatelessWidget {
                       )),
                     ]),
                 ]),
+              ),
               ),
             ),
           ],
@@ -584,7 +593,7 @@ class _TypePill extends StatelessWidget {
 }
 
 // ── Collapsible Day Section ───────────────────────────────────────────────────
-class _DaySection extends StatelessWidget {
+class _DaySection extends ConsumerWidget {
   final String dayAbbr, dayFull;
   final List<dynamic> slots;
   final List<Color> palette;
@@ -592,7 +601,7 @@ class _DaySection extends StatelessWidget {
   const _DaySection({required this.dayAbbr, required this.dayFull, required this.slots, required this.palette, required this.isToday});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -644,17 +653,19 @@ class _DaySection extends StatelessWidget {
             catch (_) { slotColor = palette[i % palette.length]; }
             final slotType = slot['slot_type'] as String? ?? 'lecture';
 
-            return Container(
-              margin: const EdgeInsets.only(bottom: 6),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
-                color: DesignColor.s1,
-                borderRadius: BorderRadius.circular(12),
-                border: Border(left: BorderSide(color: slotColor, width: 3)),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
+            return GestureDetector(
+              onTap: () => showEditSlotSheet(context, ref, slot),
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: DesignColor.s1,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border(left: BorderSide(color: slotColor, width: 3)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
                   Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Text(subject['name'] ?? 'Unknown',
                       style: const TextStyle(color: DesignColor.text, fontWeight: FontWeight.w600, fontSize: 13)),
@@ -664,6 +675,7 @@ class _DaySection extends StatelessWidget {
                   _TypePill(label: slotType, color: slotColor),
                 ],
               ),
+             ),
             );
           }),
       ]),

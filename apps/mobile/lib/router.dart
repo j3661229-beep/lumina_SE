@@ -2,16 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'features/auth/auth_screen.dart';
-import 'features/home/home_screen.dart';
 import 'features/timetable/timetable_screen.dart';
 import 'features/timetable/ocr_parser_screen.dart';
 import 'features/timetable/attendance_screen.dart';
 import 'features/timetable/bunk_analytics_screen.dart';
-import 'features/hub/groups_screen.dart';
 import 'features/hub/group_chat_screen.dart';
 import 'features/hub/whiteboard_screen.dart';
 import 'features/hub/pasteboard_screen.dart';
-import 'features/kanban/kanban_screen.dart'; 
+import 'features/kanban/kanban_screen.dart'; // exports KanbanScreen + MyTasksKanbanScreen
 import 'features/calendar/heatmap_screen.dart';
 import 'features/profile/profile_screen.dart';
 import 'features/expenses/expense_screen.dart';
@@ -51,17 +49,16 @@ final router = GoRouter(
     ShellRoute(
       builder: (ctx, state, child) => HomeShell(child: child),
       routes: [
-        GoRoute(path: '/home', builder: (_, __) => const HomeScreen()),
+        GoRoute(path: '/home', builder: (_, __) => const TimetableScreen()),
         GoRoute(path: '/groups', builder: (_, __) => const GroupsScreen()),
         GoRoute(path: '/calendar', builder: (_, __) => const HeatmapScreen()),
         GoRoute(path: '/expenses', builder: (_, __) => const ExpenseScreen()),
         GoRoute(path: '/flow', builder: (_, __) => const FlowGraphScreen()),
         GoRoute(path: '/rag', builder: (_, __) => const RagScreen()),
-        GoRoute(path: '/my-tasks', builder: (_, __) => const MyTasksKanbanScreen()),
-        GoRoute(path: '/profile', builder: (_, __) => const ProfileScreen()),
       ],
     ),
     // Full-screen routes (outside shell)
+    GoRoute(path: '/profile', builder: (_, __) => const ProfileScreen()),
     GoRoute(path: '/ocr', builder: (_, __) => const OcrParserScreen()),
     GoRoute(path: '/bunk', builder: (_, __) => const BunkAnalyticsScreen()),
     GoRoute(path: '/weekly-wrap', builder: (_, __) => const WeeklyWrapScreen()),
@@ -84,6 +81,10 @@ final router = GoRouter(
     GoRoute(
       path: '/kanban/:groupId',
       builder: (ctx, state) => KanbanScreen(groupId: state.pathParameters['groupId']!),
+    ),
+    GoRoute(
+      path: '/my-tasks',
+      builder: (_, __) => const MyTasksKanbanScreen(),
     ),
   ],
 );

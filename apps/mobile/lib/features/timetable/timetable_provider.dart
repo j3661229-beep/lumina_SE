@@ -62,6 +62,16 @@ class TimetableNotifier extends AsyncNotifier<List<dynamic>> {
     }
   }
 
+  Future<void> updateSlot(String slotId, Map<String, dynamic> data) async {
+    await ApiClient.instance.dio.put('/timetable/slots/$slotId', data: data);
+    ref.invalidateSelf();
+  }
+
+  Future<void> deleteIndividualSlot(String slotId) async {
+    await ApiClient.instance.dio.delete('/timetable/slots/$slotId');
+    ref.invalidateSelf();
+  }
+
   Future<List<ParsedSlot>> uploadTimetableImage(String filePath) async {
     final formData = FormData.fromMap({
       'file': await MultipartFile.fromFile(filePath),
@@ -90,8 +100,21 @@ class TimetableNotifier extends AsyncNotifier<List<dynamic>> {
       'date': date,
       'status': status,
     });
+    ref.invalidate(bunkAnalyticsProvider);
+    ref.invalidate(attendanceLogsProvider);
   }
 }
+
+final attendanceLogsProvider = FutureProvider<Map<String, String>>((ref) async {
+  final logs = await ApiClient.instance.get<List<dynamic>>('/timetable/attendance');
+  final map = <String, String>{};
+  for (var log in logs) {
+    if (log['date'] == null || log['slotId'] == null) continue;
+    final dateStr = (log['date'] as String).substring(0, 10); // 'yyyy-MM-dd'
+    map['${log['slotId']}_$dateStr'] = log['status'] as String? ?? '';
+  }
+  return map;
+});
 
 final bunkAnalyticsProvider = FutureProvider<List<dynamic>>(
   (ref) => ApiClient.instance.get<List<dynamic>>('/timetable/bunk-analytics'),
