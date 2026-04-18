@@ -22,28 +22,33 @@ const DocumentChunkSchema = CollectionSchema(
       name: r'addedAt',
       type: IsarType.dateTime,
     ),
-    r'chunkText': PropertySchema(
+    r'chunkIndex': PropertySchema(
       id: 1,
+      name: r'chunkIndex',
+      type: IsarType.long,
+    ),
+    r'chunkText': PropertySchema(
+      id: 2,
       name: r'chunkText',
       type: IsarType.string,
     ),
     r'docId': PropertySchema(
-      id: 2,
+      id: 3,
       name: r'docId',
       type: IsarType.string,
     ),
     r'docTitle': PropertySchema(
-      id: 3,
+      id: 4,
       name: r'docTitle',
       type: IsarType.string,
     ),
     r'docType': PropertySchema(
-      id: 4,
+      id: 5,
       name: r'docType',
       type: IsarType.string,
     ),
     r'embedding': PropertySchema(
-      id: 5,
+      id: 6,
       name: r'embedding',
       type: IsarType.doubleList,
     )
@@ -110,11 +115,12 @@ void _documentChunkSerialize(
   Map<Type, List<int>> allOffsets,
 ) {
   writer.writeDateTime(offsets[0], object.addedAt);
-  writer.writeString(offsets[1], object.chunkText);
-  writer.writeString(offsets[2], object.docId);
-  writer.writeString(offsets[3], object.docTitle);
-  writer.writeString(offsets[4], object.docType);
-  writer.writeDoubleList(offsets[5], object.embedding);
+  writer.writeLong(offsets[1], object.chunkIndex);
+  writer.writeString(offsets[2], object.chunkText);
+  writer.writeString(offsets[3], object.docId);
+  writer.writeString(offsets[4], object.docTitle);
+  writer.writeString(offsets[5], object.docType);
+  writer.writeDoubleList(offsets[6], object.embedding);
 }
 
 DocumentChunk _documentChunkDeserialize(
@@ -125,11 +131,12 @@ DocumentChunk _documentChunkDeserialize(
 ) {
   final object = DocumentChunk();
   object.addedAt = reader.readDateTime(offsets[0]);
-  object.chunkText = reader.readString(offsets[1]);
-  object.docId = reader.readString(offsets[2]);
-  object.docTitle = reader.readString(offsets[3]);
-  object.docType = reader.readString(offsets[4]);
-  object.embedding = reader.readDoubleList(offsets[5]) ?? [];
+  object.chunkIndex = reader.readLong(offsets[1]);
+  object.chunkText = reader.readString(offsets[2]);
+  object.docId = reader.readString(offsets[3]);
+  object.docTitle = reader.readString(offsets[4]);
+  object.docType = reader.readString(offsets[5]);
+  object.embedding = reader.readDoubleList(offsets[6]) ?? [];
   object.id = id;
   return object;
 }
@@ -144,7 +151,7 @@ P _documentChunkDeserializeProp<P>(
     case 0:
       return (reader.readDateTime(offset)) as P;
     case 1:
-      return (reader.readString(offset)) as P;
+      return (reader.readLong(offset)) as P;
     case 2:
       return (reader.readString(offset)) as P;
     case 3:
@@ -152,6 +159,8 @@ P _documentChunkDeserializeProp<P>(
     case 4:
       return (reader.readString(offset)) as P;
     case 5:
+      return (reader.readString(offset)) as P;
+    case 6:
       return (reader.readDoubleList(offset) ?? []) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -494,6 +503,62 @@ extension DocumentChunkQueryFilter
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.between(
         property: r'addedAt',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<DocumentChunk, DocumentChunk, QAfterFilterCondition>
+      chunkIndexEqualTo(int value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'chunkIndex',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<DocumentChunk, DocumentChunk, QAfterFilterCondition>
+      chunkIndexGreaterThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'chunkIndex',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<DocumentChunk, DocumentChunk, QAfterFilterCondition>
+      chunkIndexLessThan(
+    int value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'chunkIndex',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<DocumentChunk, DocumentChunk, QAfterFilterCondition>
+      chunkIndexBetween(
+    int lower,
+    int upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'chunkIndex',
         lower: lower,
         includeLower: includeLower,
         upper: upper,
@@ -1276,6 +1341,19 @@ extension DocumentChunkQuerySortBy
     });
   }
 
+  QueryBuilder<DocumentChunk, DocumentChunk, QAfterSortBy> sortByChunkIndex() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'chunkIndex', Sort.asc);
+    });
+  }
+
+  QueryBuilder<DocumentChunk, DocumentChunk, QAfterSortBy>
+      sortByChunkIndexDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'chunkIndex', Sort.desc);
+    });
+  }
+
   QueryBuilder<DocumentChunk, DocumentChunk, QAfterSortBy> sortByChunkText() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'chunkText', Sort.asc);
@@ -1338,6 +1416,19 @@ extension DocumentChunkQuerySortThenBy
   QueryBuilder<DocumentChunk, DocumentChunk, QAfterSortBy> thenByAddedAtDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'addedAt', Sort.desc);
+    });
+  }
+
+  QueryBuilder<DocumentChunk, DocumentChunk, QAfterSortBy> thenByChunkIndex() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'chunkIndex', Sort.asc);
+    });
+  }
+
+  QueryBuilder<DocumentChunk, DocumentChunk, QAfterSortBy>
+      thenByChunkIndexDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'chunkIndex', Sort.desc);
     });
   }
 
@@ -1412,6 +1503,12 @@ extension DocumentChunkQueryWhereDistinct
     });
   }
 
+  QueryBuilder<DocumentChunk, DocumentChunk, QDistinct> distinctByChunkIndex() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'chunkIndex');
+    });
+  }
+
   QueryBuilder<DocumentChunk, DocumentChunk, QDistinct> distinctByChunkText(
       {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
@@ -1458,6 +1555,12 @@ extension DocumentChunkQueryProperty
   QueryBuilder<DocumentChunk, DateTime, QQueryOperations> addedAtProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'addedAt');
+    });
+  }
+
+  QueryBuilder<DocumentChunk, int, QQueryOperations> chunkIndexProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'chunkIndex');
     });
   }
 

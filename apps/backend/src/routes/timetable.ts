@@ -41,14 +41,36 @@ router.post('/upload-ocr', requireAuth, upload.single('file'), async (req: AuthR
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
   try {
-    console.log('[OCR] Sending to Gemini...');
+    const profile = await prisma.profile.findUnique({
+      where: { id: req.userId! },
+      select: { batch: true }
+    });
+    const batchCode = profile?.batch ?? 'A'; // Default to A if not set
+    const batchLetter = batchCode.replace(/[^A-D]/g, '') || 'A';
+    // If user's batch is "A", we just want "A".
+
+
+    console.log(`[OCR] Sending to Gemini... Batch configured: ${batchCode} (Letter: ${batchLetter})`);
+
+    const promptText = `Extract the class timetable from the provided image. The user's batch is "${batchLetter}".
+Follow these rules strictly:
+1. The timetable contains both LECTURES (single-line cells) and LABS (multi-line cells spanning 2 hours).
+2. For LECTURE slots (cells with a single entry like "DAA / PBB / 508"): Extract them normally. They apply to all batches.
+3. For LAB slots (cells containing multiple stacked entries for different batches, e.g., "OS / A / AN / 509", "DAA / B / SND / 604"): 
+   - Parse all the stacked lines in that time block.
+   - ONLY extract the specific line where the batch letter (the second item, e.g., "B" in "OS / B /...") matches the user's batch "${batchLetter}". 
+   - Ignore the lines for other batches.
+   - For this extracted lab, ensure the slot_type is "lab" and its duration covers the entire 2-hour block (e.g., start_time: 11:15, end_time: 13:15).
+4. Format: Identify the subject name, the assigned teacher (if available), the day of the week (lowercase long format like "monday"), the start time (HH:mm 24-hr format), the end time (HH:mm 24-hr format), and room number (if available).
+5. Ignore blank slots, short breaks, recess, or lunch.`;
+
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-2.5-flash-lite',
       contents: [
         {
           role: 'user',
           parts: [
-            { text: 'Extract the class timetable from this document. Identify the subject name, the assigned teacher (if available), the day of the week (lowercase long format like "monday"), the start time (HH:mm 24-hr format), and the end time (HH:mm 24-hr format). Ignore blank slots or recess/lunch.' },
+            { text: promptText },
             { inlineData: { data: req.file.buffer.toString('base64'), mimeType: req.file.mimetype } }
           ]
         }
@@ -177,20 +199,20 @@ router.get('/slots', requireAuth, async (req: AuthRequest, res) => {
 
   // Transform to snake_case so the Flutter client can read all fields correctly
   const result = slots.map((s) => ({
-    id:          s.id,
-    user_id:     s.userId,
-    subject_id:  s.subjectId,
+    id: s.id,
+    user_id: s.userId,
+    subject_id: s.subjectId,
     day_of_week: s.dayOfWeek,   // enum → 'monday' | 'tuesday' …
-    start_time:  s.startTime,
-    end_time:    s.endTime,
-    room:        s.room,
-    slot_type:   s.slotType,
-    created_at:  s.createdAt,
+    start_time: s.startTime,
+    end_time: s.endTime,
+    room: s.room,
+    slot_type: s.slotType,
+    created_at: s.createdAt,
     subject: {
-      name:      s.subject.name,
-      code:      s.subject.code,
+      name: s.subject.name,
+      code: s.subject.code,
       color_hex: s.subject.colorHex,
-      teacher:   s.subject.teacher,
+      teacher: s.subject.teacher,
     },
   }));
 
@@ -257,8 +279,8 @@ router.get('/bunk-analytics', requireAuth, async (req: AuthRequest, res) => {
     }
     for (const log of slot.attendanceLogs) {
       subjectMap[name].total++;
-      if (log.status === 'present')   subjectMap[name].present++;
-      if (log.status === 'absent')    subjectMap[name].absent++;
+      if (log.status === 'present') subjectMap[name].present++;
+      if (log.status === 'absent') subjectMap[name].absent++;
       if (log.status === 'cancelled') subjectMap[name].cancelled++;
     }
   }
@@ -276,6 +298,75 @@ router.get('/bunk-analytics', requireAuth, async (req: AuthRequest, res) => {
   }));
 
   return res.json(result);
+});
+
+// ─────────────────────────────────────────────────────────────
+// POST /api/timetable/generate — Deterministic Auto-Generation
+// ─────────────────────────────────────────────────────────────
+router.post('/generate', requireAuth, body('division').isString(), body('batch').isString(), async (req: AuthRequest, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(422).json({ errors: errors.array() });
+
+  const { division, batch } = req.body;
+  const userId = req.userId!;
+
+  // 1. Clear old timetable & subjects
+  await prisma.subject.deleteMany({ where: { userId } });
+
+  // 2. Mock template subjects based on div
+  const subjDB = await prisma.subject.createManyAndReturn({
+    data: [
+      { userId, name: 'Data Structures', code: 'CS201', teacher: 'Prof. Smith', colorHex: '#EF4444' },
+      { userId, name: 'Algorithms', code: 'CS202', teacher: 'Prof. Doe', colorHex: '#F59E0B' },
+      { userId, name: 'Database Systems', code: 'CS203', teacher: 'Prof. Lee', colorHex: '#10B981' },
+      { userId, name: 'Operating Systems', code: 'CS204', teacher: 'Prof. Turing', colorHex: '#6366F1' },
+      { userId, name: 'Computer Networks', code: 'CS205', teacher: 'Prof. Cerf', colorHex: '#8B5CF6' }
+    ]
+  });
+
+  // 3. Generate slots based on batch
+  const isA = batch.startsWith('A');
+  const d = subjDB;
+
+  const slotsData = [];
+  const days: DayOfWeek[] = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+
+  for (let i = 0; i < days.length; i++) {
+    // 2 lectures per day
+    slotsData.push({
+      userId,
+      subjectId: d[i % d.length].id,
+      dayOfWeek: days[i],
+      startTime: isA ? '09:00' : '10:00',
+      endTime: isA ? '10:00' : '11:00',
+      room: `Room ${101 + i}`,
+      slotType: 'lecture'
+    });
+    slotsData.push({
+      userId,
+      subjectId: d[(i + 1) % d.length].id,
+      dayOfWeek: days[i],
+      startTime: isA ? '10:00' : '11:00',
+      endTime: isA ? '11:00' : '12:00',
+      room: `Room ${101 + i}`,
+      slotType: 'lecture'
+    });
+  }
+
+  // Lab session
+  slotsData.push({
+    userId,
+    subjectId: d[2].id,
+    dayOfWeek: isA ? 'monday' : 'wednesday',
+    startTime: '13:00',
+    endTime: '15:00',
+    room: 'Lab 3',
+    slotType: 'lab'
+  });
+
+  await prisma.timetableSlot.createMany({ data: slotsData });
+
+  return res.json({ message: 'Timetable auto-generated successfully.' });
 });
 
 export default router;

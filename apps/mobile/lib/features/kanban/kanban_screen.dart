@@ -120,7 +120,14 @@ class _KanbanScreenState extends ConsumerState<KanbanScreen> {
     final descCtrl = TextEditingController();
     String priority = 'medium';
     KanbanCol col = KanbanCol.todo;
+    String? assigneeId;
     final cs = Theme.of(context).colorScheme;
+    
+    List<dynamic> members = [];
+    try {
+      final res = await _supabase.from('group_members').select('profile_id, profiles(display_name)').eq('group_id', widget.groupId);
+      members = res as List;
+    } catch (_) {}
 
     await showModalBottomSheet(
       context: context,
@@ -192,6 +199,19 @@ class _KanbanScreenState extends ConsumerState<KanbanScreen> {
               onChanged: (v) => setModal(() => col = v!),
             )),
           ]),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String?>(
+            value: assigneeId,
+            decoration: const InputDecoration(labelText: 'Assign To', prefixIcon: Icon(Icons.person_outline), isDense: true),
+            items: [
+              const DropdownMenuItem(value: null, child: Text('Unassigned')),
+              ...members.map((m) => DropdownMenuItem(
+                value: m['profile_id'] as String,
+                child: Text(m['profiles']['display_name'] ?? 'User'),
+              )),
+            ],
+            onChanged: (v) => setModal(() => assigneeId = v),
+          ),
           const SizedBox(height: 20),
           SizedBox(width: double.infinity, child: FilledButton.icon(
             onPressed: () async {
@@ -214,6 +234,7 @@ class _KanbanScreenState extends ConsumerState<KanbanScreen> {
                   'description': descCtrl.text.trim().isEmpty ? null : descCtrl.text.trim(),
                   'status': col.name,
                   'priority': priority,
+                  'assignee_id': assigneeId,
                 });
                 debugPrint('Task inserted OK');
                 _load(); // replace optimistic with real DB record

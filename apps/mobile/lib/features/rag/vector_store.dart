@@ -1,10 +1,12 @@
 import 'dart:math';
 import 'package:isar/isar.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:tflite_flutter/tflite_flutter.dart';
+import 'gemini_rag_service.dart';
 
 part 'vector_store.g.dart';
 
+/// A persisted document chunk with its 768-dim Gemini embedding.
+/// Falls back to 384-dim hash-based embedding when offline.
 @collection
 class DocumentChunk {
   Id id = Isar.autoIncrement;
@@ -18,14 +20,14 @@ class DocumentChunk {
   @Index(type: IndexType.value)
   late String docType;
 
-  late List<double> embedding; // 384-dim MiniLM
+  late List<double> embedding;
   late DateTime addedAt;
+  late int chunkIndex;
 }
 
 class VectorStore {
   static VectorStore? _instance;
   late Isar _isar;
-  Interpreter? _interpreter;
   bool _initialized = false;
 
   VectorStore._();
@@ -37,82 +39,110 @@ class VectorStore {
     _isar = await Isar.open(
       [DocumentChunkSchema],
       directory: dir.path,
-      name: 'lumina_rag',
+      name: 'lumina_rag_v2',
     );
-    try {
-      _interpreter = await Interpreter.fromAsset('assets/models/minilm.tflite');
-    } catch (_) {
-      // Model not present — RAG will use random embeddings as placeholder
-    }
     _initialized = true;
   }
 
-  /// Generate 384-dim embedding via TFLite MiniLM
-  /// Falls back to deterministic hash-based embedding if model not loaded
-  Future<List<double>> embed(String text) async {
-    if (_interpreter != null) {
-      final tokens = text.toLowerCase().split(RegExp(r'\s+')).take(128).toList();
-      final inputIds = List.filled(128, 0);
-      final attentionMask = List.filled(128, 0);
-      for (int i = 0; i < tokens.length; i++) {
-        inputIds[i] = tokens[i].hashCode.abs() % 30000;
-        attentionMask[i] = 1;
-      }
+  // ── Generate embedding — Gemini online or hash-based offline ──────────────
+  Future<List<double>> embed(String text, {bool isQuery = false}) async {
+    final geminiEmb = isQuery
+        ? await GeminiRagService.instance.embedQuery(text)
+        : await GeminiRagService.instance.embed(text);
 
-      final output = List.generate(1, (_) => List.filled(384, 0.0));
-      _interpreter!.runForMultipleInputs(
-        [[inputIds], [attentionMask]],
-        {0: output},
-      );
-      return output[0];
-    }
+    if (geminiEmb != null) return geminiEmb;
 
-    // Fallback: deterministic pseudo-embedding from text hash
-    final random = Random(text.hashCode);
-    return List.generate(384, (_) => random.nextDouble() * 2 - 1);
+    // Offline fallback: deterministic 768-dim hash embedding
+    final rng = Random(text.hashCode ^ text.length);
+    return List.generate(768, (_) => rng.nextDouble() * 2 - 1);
   }
 
+  // ── Store all chunks from a document ─────────────────────────────────────
   Future<void> addChunks(
-    String docId, String docTitle, List<String> chunks, String docType) async {
+    String docId,
+    String docTitle,
+    List<String> chunks,
+    String docType,
+  ) async {
+    await init();
+    await deleteDoc(docId);
+    await addChunksBatch(docId, docTitle, chunks, docType, startIndex: 0);
+  }
+
+  // ── Store a batch of chunks (used for progress reporting) ─────────────────
+  Future<void> addChunksBatch(
+    String docId,
+    String docTitle,
+    List<String> chunks,
+    String docType, {
+    required int startIndex,
+  }) async {
     await init();
     final items = <DocumentChunk>[];
-    for (final chunk in chunks) {
-      final emb = await embed(chunk);
+    for (int i = 0; i < chunks.length; i++) {
+      final emb = await embed(chunks[i]);
       items.add(DocumentChunk()
         ..docId = docId
         ..docTitle = docTitle
-        ..chunkText = chunk
+        ..chunkText = chunks[i]
         ..docType = docType
         ..embedding = emb
-        ..addedAt = DateTime.now());
+        ..addedAt = DateTime.now()
+        ..chunkIndex = startIndex + i);
     }
     await _isar.writeTxn(() => _isar.documentChunks.putAll(items));
   }
 
+  // ── Semantic search — cosine similarity over all stored embeddings ─────────
   Future<List<DocumentChunk>> search(String query, {int topK = 5}) async {
     await init();
-    final queryEmb = await embed(query);
+    final queryEmb = await embed(query, isQuery: true);
     final all = await _isar.documentChunks.where().findAll();
 
-    final scored = all.map((c) => (chunk: c, score: _cos(queryEmb, c.embedding))).toList();
-    scored.sort((a, b) => b.score.compareTo(a.score));
+    final scored = all
+        .map((c) => (chunk: c, score: _cosine(queryEmb, c.embedding)))
+        .toList()
+      ..sort((a, b) => b.score.compareTo(a.score));
+
     return scored.take(topK).map((s) => s.chunk).toList();
   }
 
-  double _cos(List<double> a, List<double> b) {
-    double dot = 0, na = 0, nb = 0;
-    for (int i = 0; i < a.length; i++) {
-      dot += a[i] * b[i];
-      na += a[i] * a[i];
-      nb += b[i] * b[i];
+  // ── All indexed documents (deduplicated by docId) ─────────────────────────
+  Future<List<({String docId, String docTitle, String docType, int chunks, DateTime addedAt})>> listDocs() async {
+    await init();
+    final all = await _isar.documentChunks.where().findAll();
+    final seen = <String, ({String docId, String docTitle, String docType, int chunks, DateTime addedAt})>{};
+    for (final c in all) {
+      seen.update(
+        c.docId,
+        (v) => (docId: v.docId, docTitle: v.docTitle, docType: v.docType, chunks: v.chunks + 1, addedAt: v.addedAt),
+        ifAbsent: () => (docId: c.docId, docTitle: c.docTitle, docType: c.docType, chunks: 1, addedAt: c.addedAt),
+      );
     }
-    if (na == 0 || nb == 0) return 0;
-    return dot / (sqrt(na) * sqrt(nb));
+    return seen.values.toList()..sort((a, b) => b.addedAt.compareTo(a.addedAt));
   }
 
   Future<void> deleteDoc(String docId) async {
     await _isar.writeTxn(
       () => _isar.documentChunks.filter().docIdEqualTo(docId).deleteAll(),
     );
+  }
+
+  Future<int> get totalChunks async {
+    await init();
+    return _isar.documentChunks.count();
+  }
+
+  // ── Cosine similarity ─────────────────────────────────────────────────────
+  double _cosine(List<double> a, List<double> b) {
+    final len = min(a.length, b.length);
+    double dot = 0, na = 0, nb = 0;
+    for (int i = 0; i < len; i++) {
+      dot += a[i] * b[i];
+      na += a[i] * a[i];
+      nb += b[i] * b[i];
+    }
+    if (na == 0 || nb == 0) return 0;
+    return dot / (sqrt(na) * sqrt(nb));
   }
 }

@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import '../../core/network/api_client.dart';
+import '../../core/theme/design_tokens.dart';
 
 class GroupChatScreen extends ConsumerStatefulWidget {
   final String groupId;
@@ -232,6 +234,52 @@ class _GroupChatScreenState extends ConsumerState<GroupChatScreen> {
     );
   }
 
+  Future<void> _showMembersSheet() async {
+    try {
+      final res = await ApiClient.instance.get<Map<String, dynamic>>('/groups/${widget.groupId}/members');
+      final currentMember = (res['members'] as List).firstWhere((m) => m['id'] == _myId, orElse: () => null);
+      final bool iAmAdmin = currentMember != null && (currentMember['isCreator'] == true || currentMember['role'] == 'admin');
+
+      if (!mounted) return;
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: const Color(0xFF0F1228),
+        builder: (ctx) => StatefulBuilder(builder: (ctx, setInnerState) {
+          final members = res['members'] as List;
+          return Container(
+            padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom + 16, left: 16, right: 16, top: 24),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const Text('Group Members', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 16),
+              ...members.map((m) {
+                final isAdmin = m['isCreator'] == true || m['role'] == 'admin';
+                return ListTile(
+                  leading: CircleAvatar(backgroundColor: DesignColor.indigo, child: Text(m['name'][0].toUpperCase(), style: const TextStyle(color: Colors.white))),
+                  title: Text(m['name'], style: const TextStyle(color: Colors.white)),
+                  subtitle: Text(isAdmin ? 'Admin' : 'Member', style: TextStyle(color: isAdmin ? DesignColor.amber : DesignColor.sub)),
+                  trailing: (iAmAdmin && !isAdmin && m['id'] != _myId)
+                      ? TextButton(
+                          onPressed: () async {
+                            try {
+                              await ApiClient.instance.post('/groups/${widget.groupId}/promote', data: {'memberId': m['id']});
+                              setInnerState(() => m['role'] = 'admin');
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('User promoted to Admin!')));
+                            } catch (e) {
+                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+                            }
+                          },
+                          child: const Text('Make Admin', style: TextStyle(color: DesignColor.indigo)))
+                      : null,
+                );
+              }),
+            ]),
+          );
+        }),
+      );
+    } catch (_) {}
+  }
+
   @override
   void dispose() {
     _channel?.unsubscribe();
@@ -275,6 +323,11 @@ class _GroupChatScreenState extends ConsumerState<GroupChatScreen> {
           ])),
         ]),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.group_outlined),
+            tooltip: 'Members',
+            onPressed: _showMembersSheet,
+          ),
           IconButton(
             icon: const Icon(Icons.view_kanban_outlined),
             tooltip: 'Kanban',

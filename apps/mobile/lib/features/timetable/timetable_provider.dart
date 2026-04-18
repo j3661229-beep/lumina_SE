@@ -37,6 +37,31 @@ class TimetableNotifier extends AsyncNotifier<List<dynamic>> {
     ref.invalidateSelf();
   }
 
+  Future<Map<String, dynamic>?> checkProfile() async {
+    try {
+      final res = await ApiClient.instance.get<dynamic>('/profile');
+      return res as Map<String, dynamic>?;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> updateProfileAndGenerate(String division, String batch) async {
+    try {
+      await ApiClient.instance.post('/profile/update', data: {
+        'division': division,
+        'batch': batch,
+      });
+      await ApiClient.instance.post('/timetable/generate', data: {
+        'division': division,
+        'batch': batch,
+      });
+      ref.invalidateSelf();
+    } catch (e) {
+      debugPrint('[Timetable] Generation failed: $e');
+    }
+  }
+
   Future<List<ParsedSlot>> uploadTimetableImage(String filePath) async {
     final formData = FormData.fromMap({
       'file': await MultipartFile.fromFile(filePath),

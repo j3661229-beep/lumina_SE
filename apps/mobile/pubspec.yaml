@@ -73,6 +73,7 @@ dependencies:
   flutter_inappwebview: ^6.0.0
   shared_preferences: ^2.5.3
   app_usage: ^4.1.0
+  syncfusion_flutter_pdf: ^31.1.19
 
 dev_dependencies:
   flutter_test:

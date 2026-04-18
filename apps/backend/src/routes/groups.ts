@@ -104,4 +104,67 @@ router.delete('/:id/leave', requireAuth, async (req: AuthRequest, res) => {
   return res.json({ message: 'Left group successfully.' });
 });
 
+// ────────────────────────────────────────────────────────────
+// GET /api/groups/:id/members — list all members
+// ────────────────────────────────────────────────────────────
+router.get('/:id/members', requireAuth, async (req: AuthRequest, res) => {
+  const members = await prisma.groupMember.findMany({
+    where: { groupId: req.params.id },
+    select: {
+      role: true,
+      profile: { select: { id: true, displayName: true, avatarUrl: true } }
+    }
+  });
+
+  const group = await prisma.group.findUnique({
+    where: { id: req.params.id },
+    select: { createdBy: true }
+  });
+
+  if (!group) return res.status(404).json({ error: 'Group not found.' });
+
+  return res.json({
+    creatorId: group.createdBy,
+    members: members.map(m => ({
+      id: m.profile.id,
+      name: m.profile.displayName,
+      avatar: m.profile.avatarUrl,
+      role: m.role,
+      isCreator: m.profile.id === group.createdBy
+    }))
+  });
+});
+
+// ────────────────────────────────────────────────────────────
+// POST /api/groups/:id/promote — make admin
+// ────────────────────────────────────────────────────────────
+router.post('/:id/promote', requireAuth, body('memberId').isUUID(), async (req: AuthRequest, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) return res.status(422).json({ error: errors.array()[0].msg });
+
+  const { memberId } = req.body;
+  const groupId = req.params.id;
+  const requesterId = req.userId!;
+
+  // Check if requester has powers (creator or admin)
+  const group = await prisma.group.findUnique({ where: { id: groupId } });
+  if (!group) return res.status(404).json({ error: 'Group not found.' });
+
+  const requesterMember = await prisma.groupMember.findUnique({
+    where: { groupId_profileId: { groupId, profileId: requesterId } }
+  });
+
+  if (!requesterMember || (requesterMember.role !== 'admin' && group.createdBy !== requesterId)) {
+    return res.status(403).json({ error: 'You do not have permission to promote users.' });
+  }
+
+  // Promote
+  await prisma.groupMember.update({
+    where: { groupId_profileId: { groupId, profileId: memberId } },
+    data: { role: 'admin' }
+  });
+
+  return res.json({ message: 'Promoted to admin successfully.' });
+});
+
 export default router;

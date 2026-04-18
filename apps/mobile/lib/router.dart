@@ -11,6 +11,7 @@ import 'features/hub/whiteboard_screen.dart';
 import 'features/hub/pasteboard_screen.dart';
 import 'features/kanban/kanban_screen.dart';
 import 'features/calendar/heatmap_screen.dart';
+import 'features/profile/profile_screen.dart';
 import 'features/expenses/expense_screen.dart';
 import 'features/expenses/weekly_wrap_screen.dart';
 import 'features/rag/rag_screen.dart';
@@ -53,12 +54,13 @@ final router = GoRouter(
         GoRoute(path: '/calendar', builder: (_, __) => const HeatmapScreen()),
         GoRoute(path: '/expenses', builder: (_, __) => const ExpenseScreen()),
         GoRoute(path: '/flow', builder: (_, __) => const FlowGraphScreen()),
+        GoRoute(path: '/rag', builder: (_, __) => const RagScreen()),
       ],
     ),
     // Full-screen routes (outside shell)
+    GoRoute(path: '/profile', builder: (_, __) => const ProfileScreen()),
     GoRoute(path: '/ocr', builder: (_, __) => const OcrParserScreen()),
     GoRoute(path: '/bunk', builder: (_, __) => const BunkAnalyticsScreen()),
-    GoRoute(path: '/rag', builder: (_, __) => const RagScreen()),
     GoRoute(path: '/weekly-wrap', builder: (_, __) => const WeeklyWrapScreen()),
     GoRoute(
       path: '/attendance/:slotId',

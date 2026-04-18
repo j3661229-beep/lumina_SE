@@ -25,10 +25,70 @@ class _TimetableScreenState extends ConsumerState<TimetableScreen> {
   @override
   void initState() {
     super.initState();
-    // Force re-fetch every time this screen mounts (e.g. after OCR upload)
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       ref.invalidate(timetableProvider);
+      final profile = await ref.read(timetableProvider.notifier).checkProfile();
+      if (profile != null && profile['division'] == null && mounted) {
+        _showOnboardingFlow();
+      }
     });
+  }
+
+  void _showOnboardingFlow() {
+    String div = 'A';
+    String batch = 'A';
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setInnerState) {
+        return Dialog(
+          backgroundColor: const Color(0xFF0F1228),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22), side: const BorderSide(color: DesignColor.borderH)),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.school_outlined, color: DesignColor.indigo, size: 40),
+              const SizedBox(height: 16),
+              const Text('Welcome to Lumina', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'Syne')),
+              const SizedBox(height: 8),
+              const Text('Set your Division and Batch to auto-generate your timetable.', textAlign: TextAlign.center, style: TextStyle(color: DesignColor.sub, fontSize: 13)),
+              const SizedBox(height: 24),
+              Row(children: [
+                Expanded(child: DropdownButtonFormField<String>(
+                  value: div,
+                  dropdownColor: const Color(0xFF0F1228),
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(labelText: 'Division', border: OutlineInputBorder()),
+                  items: ['A', 'B', 'C', 'D'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+                  onChanged: (v) => setInnerState(() => div = v!),
+                )),
+                const SizedBox(width: 12),
+                Expanded(child: DropdownButtonFormField<String>(
+                  value: batch,
+                  dropdownColor: const Color(0xFF0F1228),
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(labelText: 'Batch', border: OutlineInputBorder()),
+                  items: ['A', 'B', 'C', 'D'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+                  onChanged: (v) => setInnerState(() => batch = v!),
+                )),
+              ]),
+              const SizedBox(height: 24),
+              SizedBox(width: double.infinity, child: Container(
+                decoration: DesignStyles.gradientButton(),
+                child: FilledButton(
+                  style: FilledButton.styleFrom(backgroundColor: Colors.transparent, elevation: 0),
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    ref.read(timetableProvider.notifier).updateProfileAndGenerate(div, batch);
+                  },
+                  child: const Text('Generate Timetable'),
+                ),
+              )),
+            ]),
+          ),
+        );
+      }),
+    );
   }
 
   Future<void> _markAttendance(String slotId, String status) async {
@@ -283,9 +343,11 @@ class _Header extends StatelessWidget {
               style: TextStyle(color: DesignColor.text, fontSize: 22, fontWeight: FontWeight.w800, fontFamily: 'Syne')),
           ]),
           Row(children: [
+            _HeaderBtn(icon: Icons.person_outline, onTap: () => context.push('/profile')),
+            const SizedBox(width: 8),
             if (!hasSlots)
               _HeaderBtn(icon: Icons.document_scanner_outlined, onTap: onScan),
-            const SizedBox(width: 8),
+            if (!hasSlots) const SizedBox(width: 8),
             _HeaderBtn(icon: Icons.analytics_outlined, onTap: onBunk),
             if (hasSlots) ...[
               const SizedBox(width: 8),
