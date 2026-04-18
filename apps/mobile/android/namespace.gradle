@@ -1,0 +1,9 @@
+project.afterEvaluate { proj ->
+    if (proj.hasProperty('android')) {
+        proj.android {
+            if (namespace == null) {
+                namespace proj.group
+            }
+        }
+    }
+}

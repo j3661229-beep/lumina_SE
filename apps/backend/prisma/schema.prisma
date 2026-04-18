@@ -1,0 +1,369 @@
+// =============================================================
+// LUMINA — Prisma Schema
+// Stack: PostgreSQL 16 via Supabase
+// =============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// =============================================================
+// ENUMS
+// =============================================================
+
+enum DayOfWeek {
+  monday
+  tuesday
+  wednesday
+  thursday
+  friday
+  saturday
+  sunday
+
+  @@map("day_of_week")
+}
+
+enum AttendanceStatus {
+  present
+  absent
+  cancelled
+  holiday
+
+  @@map("attendance_status")
+}
+
+enum TaskStatus {
+  backlog
+  todo
+  doing
+  done
+
+  @@map("task_status")
+}
+
+enum TaskPriority {
+  low
+  medium
+  high
+  critical
+
+  @@map("task_priority")
+}
+
+enum MessageType {
+  text
+  code
+  image
+  whiteboard
+  system
+
+  @@map("message_type")
+}
+
+enum ExpenseCategory {
+  food
+  transport
+  stationery
+  fees
+  entertainment
+  health
+  other
+
+  @@map("expense_category")
+}
+
+enum StressLevel {
+  low
+  medium
+  high
+  critical
+
+  @@map("stress_level")
+}
+
+enum EventSource {
+  gmail
+  gcal
+  manual
+
+  @@map("event_source")
+}
+
+// =============================================================
+// MODELS
+// =============================================================
+
+/// Extends Supabase auth.users — id is the Supabase auth UID
+model Profile {
+  id          String   @id @db.Uuid
+  displayName String   @map("display_name")
+  avatarUrl   String?  @map("avatar_url")
+  college     String?
+  branch      String?
+  year        Int?     @db.SmallInt
+  rollNumber  String?  @map("roll_number")
+  fcmToken    String?  @map("fcm_token")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  subjects             Subject[]
+  timetableSlots       TimetableSlot[]
+  attendanceLogs       AttendanceLog[]
+  contextSwitchLogs    ContextSwitchLog[]
+  cognitiveDebtScores  CognitiveDebtScore[]
+  sentMessages         Message[]            @relation("SentMessages")
+  whiteboardStrokes    WhiteboardStroke[]
+  pasteboardItems      PasteboardItem[]
+  kanbanTasksOwned     KanbanTask[]         @relation("TaskOwner")
+  kanbanTasksAssigned  KanbanTask[]         @relation("TaskAssignee")
+  calendarEvents       CalendarEvent[]
+  expenses             Expense[]
+  groupsCreated        Group[]              @relation("GroupCreator")
+  groupMemberships     GroupMember[]
+
+  @@map("profiles")
+}
+
+model Group {
+  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name        String
+  description String?
+  inviteCode  String?  @unique @default(dbgenerated("substr(md5(random()::text), 1, 8)")) @map("invite_code")
+  createdBy   String   @map("created_by") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  creator            Profile            @relation("GroupCreator", fields: [createdBy], references: [id])
+  members            GroupMember[]
+  messages           Message[]
+  whiteboardStrokes  WhiteboardStroke[]
+  pasteboardItems    PasteboardItem[]
+  kanbanTasks        KanbanTask[]
+  squadFlowSnapshots SquadFlowSnapshot[]
+
+  @@map("groups")
+}
+
+model GroupMember {
+  groupId   String   @map("group_id") @db.Uuid
+  profileId String   @map("profile_id") @db.Uuid
+  role      String   @default("member")
+  joinedAt  DateTime @default(now()) @map("joined_at") @db.Timestamptz(6)
+
+  group   Group   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, profileId])
+  @@map("group_members")
+}
+
+model Subject {
+  id        String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  name      String
+  code      String?
+  teacher   String?
+  colorHex  String   @default("#6366F1") @map("color_hex")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user           Profile         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  timetableSlots TimetableSlot[]
+
+  @@unique([userId, name])
+  @@map("subjects")
+}
+
+model TimetableSlot {
+  id        String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  subjectId String    @map("subject_id") @db.Uuid
+  dayOfWeek DayOfWeek @map("day_of_week")
+  startTime String    @map("start_time") /// HH:mm format
+  endTime   String    @map("end_time")   /// HH:mm format
+  room      String?
+  slotType  String    @default("lecture") @map("slot_type")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user           Profile         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject        Subject         @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  attendanceLogs AttendanceLog[]
+
+  @@unique([userId, dayOfWeek, startTime], name: "no_overlap")
+  @@map("timetable_slots")
+}
+
+model AttendanceLog {
+  id        String           @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId    String           @map("user_id") @db.Uuid
+  slotId    String           @map("slot_id") @db.Uuid
+  date      DateTime         @db.Date
+  status    AttendanceStatus @default(present)
+  note      String?
+  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  profile Profile       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  slot    TimetableSlot @relation(fields: [slotId], references: [id], onDelete: Cascade)
+
+  @@unique([slotId, date])
+  @@map("attendance_logs")
+}
+
+model ContextSwitchLog {
+  id           String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  appName      String    @map("app_name")
+  packageName  String?   @map("package_name")
+  sessionStart DateTime  @map("session_start") @db.Timestamptz(6)
+  sessionEnd   DateTime? @map("session_end") @db.Timestamptz(6)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  profile Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // duration_secs is a generated column — managed via raw SQL migration
+  @@map("context_switch_logs")
+}
+
+model CognitiveDebtScore {
+  id         String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  score      Decimal  @db.Decimal(6, 2)
+  windowDate DateTime @default(dbgenerated("CURRENT_DATE")) @map("window_date") @db.Date
+  computedAt DateTime @default(now()) @map("computed_at") @db.Timestamptz(6)
+
+  profile Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, windowDate])
+  @@map("cognitive_debt_scores")
+}
+
+model SquadFlowSnapshot {
+  id         String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  groupId    String   @map("group_id") @db.Uuid
+  anonId     String   @map("anon_id")
+  debtCurve  Json     @map("debt_curve")
+  snapshotAt DateTime @default(now()) @map("snapshot_at") @db.Timestamptz(6)
+
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@map("squad_flow_snapshots")
+}
+
+model Message {
+  id          String      @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  groupId     String      @map("group_id") @db.Uuid
+  senderId    String      @map("sender_id") @db.Uuid
+  content     String
+  messageType MessageType @default(text) @map("message_type")
+  metadata    Json?
+  isPinned    Boolean     @default(false) @map("is_pinned")
+  replyToId   String?     @map("reply_to_id") @db.Uuid
+  editedAt    DateTime?   @map("edited_at") @db.Timestamptz(6)
+  deletedAt   DateTime?   @map("deleted_at") @db.Timestamptz(6)
+  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  group   Group   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  sender  Profile @relation("SentMessages", fields: [senderId], references: [id])
+  replyTo Message?  @relation("MessageReplies", fields: [replyToId], references: [id])
+  replies Message[] @relation("MessageReplies")
+
+  @@index([groupId, createdAt(sort: Desc)])
+  @@map("messages")
+}
+
+model WhiteboardStroke {
+  id         String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  groupId    String   @map("group_id") @db.Uuid
+  sessionId  String   @map("session_id")
+  authorId   String   @map("author_id") @db.Uuid
+  strokeData Json     @map("stroke_data")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  group  Group   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  author Profile @relation(fields: [authorId], references: [id])
+
+  @@map("whiteboard_strokes")
+}
+
+model PasteboardItem {
+  id         String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  groupId    String   @map("group_id") @db.Uuid
+  authorId   String   @map("author_id") @db.Uuid
+  title      String?
+  content    String
+  language   String?
+  storageUrl String?  @map("storage_url")
+  isPinned   Boolean  @default(true) @map("is_pinned")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  group  Group   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  author Profile @relation(fields: [authorId], references: [id])
+
+  @@map("pasteboard_items")
+}
+
+model KanbanTask {
+  id          String       @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  groupId     String?      @map("group_id") @db.Uuid
+  userId      String       @map("user_id") @db.Uuid
+  title       String
+  description String?
+  status      TaskStatus   @default(todo)
+  priority    TaskPriority @default(medium)
+  assigneeId  String?      @map("assignee_id") @db.Uuid
+  dueDate     DateTime?    @map("due_date") @db.Date
+  tags        String[]     @default([])
+  position    Float        @default(0)
+  isPersonal  Boolean      @default(false) @map("is_personal")
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  group    Group?   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  owner    Profile  @relation("TaskOwner", fields: [userId], references: [id], onDelete: Cascade)
+  assignee Profile? @relation("TaskAssignee", fields: [assigneeId], references: [id])
+
+  @@index([groupId, status])
+  @@index([userId, status])
+  @@map("kanban_tasks")
+}
+
+model CalendarEvent {
+  id          String      @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId      String      @map("user_id") @db.Uuid
+  title       String
+  description String?
+  eventDate   DateTime    @map("event_date") @db.Date
+  startTime   String?     @map("start_time")
+  endTime     String?     @map("end_time")
+  stressLevel StressLevel @default(low) @map("stress_level")
+  source      EventSource @default(manual)
+  externalId  String?     @map("external_id")
+  keywords    String[]    @default([])
+  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  profile Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, externalId])
+  @@index([userId, eventDate])
+  @@map("calendar_events")
+}
+
+model Expense {
+  id          String          @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId      String          @map("user_id") @db.Uuid
+  amount      Decimal         @db.Decimal(10, 2)
+  category    ExpenseCategory @default(other)
+  description String?
+  expenseDate DateTime        @default(dbgenerated("CURRENT_DATE")) @map("expense_date") @db.Date
+  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  profile Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expenseDate(sort: Desc)])
+  @@map("expenses")
+}
