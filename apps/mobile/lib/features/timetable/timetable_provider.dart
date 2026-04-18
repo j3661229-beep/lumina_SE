@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 import '../../core/network/api_client.dart';
-import 'ocr_parser_screen.dart';
+import 'timetable_models.dart';
 
 final timetableProvider = AsyncNotifierProvider<TimetableNotifier, List<dynamic>>(
   TimetableNotifier.new,
@@ -25,11 +25,20 @@ class TimetableNotifier extends AsyncNotifier<List<dynamic>> {
     return slots;
   }
 
-  Future<void> uploadSlots(List<ParsedSlot> slots) async {
+  Future<void> uploadSlots({
+    required List<ParsedSlot> slots,
+    List<ParsedHoliday>? holidays,
+    DateTime? semesterStart,
+    DateTime? semesterEnd,
+  }) async {
     await ApiClient.instance.post('/timetable/slots', data: {
       'slots': slots.map((s) => s.toJson()).toList(),
+      if (holidays != null) 'holidays': holidays.map((h) => h.toJson()).toList(),
+      if (semesterStart != null) 'semester_start': semesterStart.toIso8601String(),
+      if (semesterEnd != null) 'semester_end': semesterEnd.toIso8601String(),
     });
     ref.invalidateSelf();
+    ref.invalidate(bunkAnalyticsProvider);
   }
 
   Future<void> deleteTimetable() async {
@@ -72,7 +81,7 @@ class TimetableNotifier extends AsyncNotifier<List<dynamic>> {
     ref.invalidateSelf();
   }
 
-  Future<List<ParsedSlot>> uploadTimetableImage(String filePath) async {
+  Future<OcrResult> uploadTimetableImage(String filePath) async {
     final formData = FormData.fromMap({
       'file': await MultipartFile.fromFile(filePath),
     });
@@ -80,11 +89,11 @@ class TimetableNotifier extends AsyncNotifier<List<dynamic>> {
       '/timetable/upload-ocr',
       data: formData,
     );
-    // The backend returns JSON matching { slots: [ ... ] }
+
     final dynamic slotsData = res.data['slots'];
-    if (slotsData == null) return [];
-    
-    return (slotsData as List).map((s) => ParsedSlot(
+    final dynamic holidaysData = res.data['holidays'];
+
+    final slots = (slotsData as List? ?? []).map((s) => ParsedSlot(
       subjectName: s['subject_name'] ?? 'Unknown',
       teacher: s['teacher'],
       dayOfWeek: s['day_of_week'] ?? 'monday',
@@ -92,6 +101,13 @@ class TimetableNotifier extends AsyncNotifier<List<dynamic>> {
       endTime: s['end_time'] ?? '10:00',
       slotType: s['slot_type'] ?? 'lecture',
     )).toList();
+
+    final holidays = (holidaysData as List? ?? []).map((h) => ParsedHoliday(
+      name: h['name'] ?? 'Holiday',
+      date: h['date'] ?? '',
+    )).toList();
+
+    return OcrResult(slots: slots, holidays: holidays);
   }
 
   Future<void> markAttendance(String slotId, String date, String status) async {

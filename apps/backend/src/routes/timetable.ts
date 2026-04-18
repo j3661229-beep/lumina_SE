@@ -62,7 +62,8 @@ Follow these rules strictly:
    - Ignore the lines for other batches.
    - For this extracted lab, ensure the slot_type is "lab" and its duration covers the entire 2-hour block (e.g., start_time: 11:15, end_time: 13:15).
 4. Format: Identify the subject name, the assigned teacher (if available), the day of the week (lowercase long format like "monday"), the start time (HH:mm 24-hr format), the end time (HH:mm 24-hr format), and room number (if available).
-5. Ignore blank slots, short breaks, recess, or lunch.`;
+5. Extract "holidays" or "vacation dates" if mentioned in the document. For holidays, extract the "date" (YYYY-MM-DD) and a "name".
+6. Ignore blank slots, short breaks, recess, or lunch.`;
 
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash-lite',
@@ -95,9 +96,20 @@ Follow these rules strictly:
                 },
                 required: ['subject_name', 'day_of_week', 'start_time', 'end_time', 'slot_type']
               }
+            },
+            holidays: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  name: { type: Type.STRING },
+                  date: { type: Type.STRING, description: "YYYY-MM-DD" }
+                },
+                required: ['name', 'date']
+              }
             }
           },
-          required: ['slots']
+          required: ['slots', 'holidays']
         }
       }
     });
@@ -129,9 +141,50 @@ router.post(
 
     const userId = req.userId!;
     await ensureProfile(userId);
-    const { slots } = req.body as {
+    const { slots, holidays, semester_start, semester_end } = req.body as {
       slots: Array<{ subject_name: string; teacher?: string; day_of_week: DayOfWeek; start_time: string; end_time: string; room?: string; slot_type?: string }>;
+      holidays?: Array<{ name: string; date: string }>;
+      semester_start?: string;
+      semester_end?: string;
     };
+
+    // Update Profile with semester dates
+    if (semester_start || semester_end) {
+      await prisma.profile.update({
+        where: { id: userId },
+        data: {
+          semesterStart: semester_start ? new Date(semester_start) : undefined,
+          semesterEnd: semester_end ? new Date(semester_end) : undefined,
+        }
+      });
+    }
+
+    // Save holidays (deduplicate by date to avoid P2002)
+    if (holidays && holidays.length > 0) {
+      await prisma.holiday.deleteMany({ where: { userId } });
+      
+      const uniqueHolidays: any[] = [];
+      const seenDates = new Set<string>();
+      
+      for (const h of holidays) {
+        try {
+          const d = new Date(h.date);
+          const ISOString = d.toISOString().split('T')[0];
+          if (!seenDates.has(ISOString)) {
+            seenDates.add(ISOString);
+            uniqueHolidays.push(h);
+          }
+        } catch (_) { /* Skip invalid dates */ }
+      }
+
+      await prisma.holiday.createMany({
+        data: uniqueHolidays.map(h => ({
+          userId,
+          name: h.name,
+          date: new Date(h.date)
+        }))
+      });
+    }
 
     // Upsert subjects by name — return id map
     const subjectNames = [...new Set(slots.map((s) => s.subject_name))];
@@ -150,35 +203,35 @@ router.post(
       subjectMap[name] = subject.id;
     }
 
-    // Upsert timetable slots
-    const inserted = await Promise.all(
-      slots.map((s) =>
-        prisma.timetableSlot.upsert({
-          where: {
-            no_overlap: {
-              userId,
-              dayOfWeek: s.day_of_week,
-              startTime: s.start_time,
-            },
-          },
-          create: {
+    // Process slots sequentially to avoid connection pool timeouts (Prisma P2024)
+    const inserted = [];
+    for (const s of slots) {
+      const slot = await prisma.timetableSlot.upsert({
+        where: {
+          no_overlap: {
             userId,
-            subjectId: subjectMap[s.subject_name],
             dayOfWeek: s.day_of_week,
             startTime: s.start_time,
-            endTime: s.end_time,
-            room: s.room ?? null,
-            slotType: s.slot_type ?? 'lecture',
           },
-          update: {
-            subjectId: subjectMap[s.subject_name],
-            endTime: s.end_time,
-            room: s.room ?? null,
-            slotType: s.slot_type ?? 'lecture',
-          },
-        })
-      )
-    );
+        },
+        create: {
+          userId,
+          subjectId: subjectMap[s.subject_name],
+          dayOfWeek: s.day_of_week,
+          startTime: s.start_time,
+          endTime: s.end_time,
+          room: s.room ?? null,
+          slotType: s.slot_type ?? 'lecture',
+        },
+        update: {
+          subjectId: subjectMap[s.subject_name],
+          endTime: s.end_time,
+          room: s.room ?? null,
+          slotType: s.slot_type ?? 'lecture',
+        },
+      });
+      inserted.push(slot);
+    }
 
     return res.json({ inserted: inserted.length, slots: inserted });
   }
@@ -330,56 +383,87 @@ router.post(
 router.get('/bunk-analytics', requireAuth, async (req: AuthRequest, res) => {
   const userId = req.userId!;
 
-  // Get all slots for the user with their attendance logs
+  const profile = await prisma.profile.findUnique({
+    where: { id: userId },
+    select: { semesterStart: true, semesterEnd: true }
+  });
+
   const slots = await prisma.timetableSlot.findMany({
     where: { userId },
     include: {
       subject: { select: { name: true, teacher: true, colorHex: true } },
-      attendanceLogs: { select: { status: true } },
+      attendanceLogs: { select: { status: true, date: true } },
     },
   });
 
-  // Aggregate per subject
-  const subjectMap: Record<string, {
-    subject_name: string; teacher: string | null; color_hex: string;
-    total: number; present: number; absent: number; cancelled: number;
-  }> = {};
+  const holidays = await prisma.holiday.findMany({
+    where: { userId },
+    select: { date: true }
+  });
+  const holidaySet = new Set(holidays.map(h => h.date.toISOString().split('T')[0]));
 
-  for (const slot of slots) {
-    const name = slot.subject.name;
-    if (!subjectMap[name]) {
-      subjectMap[name] = {
-        subject_name: name,
-        teacher: slot.subject.teacher,
-        color_hex: slot.subject.colorHex,
-        total: 0, present: 0, absent: 0, cancelled: 0,
+  const result = slots.map(slot => {
+    const presentCount = slot.attendanceLogs.filter(l => l.status === 'present').length;
+    const absentCount = slot.attendanceLogs.filter(l => l.status === 'absent').length;
+    const cancelledCount = slot.attendanceLogs.filter(l => l.status === 'cancelled').length;
+    const totalHeld = presentCount + absentCount + cancelledCount;
+
+    // Projection logic
+    let totalPlanned = totalHeld;
+    if (profile?.semesterStart && profile?.semesterEnd) {
+      const now = new Date();
+      const end = new Date(profile.semesterEnd);
+      
+      const dayMap: Record<DayOfWeek, number> = {
+        'monday': 1, 'tuesday': 2, 'wednesday': 3, 'thursday': 4, 'friday': 5, 'saturday': 6, 'sunday': 0
       };
+      const targetDay = dayMap[slot.dayOfWeek];
+
+      let current = new Date(now);
+      current.setHours(0,0,0,0);
+      current.setDate(current.getDate() + 1); // Start projecting from tomorrow
+      end.setHours(23,59,59,999);
+
+      while (current <= end) {
+        if (current.getDay() === targetDay) {
+          const dateStr = current.toISOString().split('T')[0];
+          if (!holidaySet.has(dateStr)) {
+            totalPlanned++;
+          }
+        }
+        current.setDate(current.getDate() + 1);
+      }
     }
-    for (const log of slot.attendanceLogs) {
-      subjectMap[name].total++;
-      if (log.status === 'present') subjectMap[name].present++;
-      if (log.status === 'absent') subjectMap[name].absent++;
-      if (log.status === 'cancelled') subjectMap[name].cancelled++;
+
+    return {
+      subject_name: slot.subject.name,
+      teacher: slot.subject.teacher,
+      color_hex: slot.subject.colorHex,
+      attended: presentCount,
+      absent: absentCount,
+      total_held: totalHeld,
+      total_planned: totalPlanned,
+      percentage: totalHeld > 0 ? Math.round((presentCount / totalHeld) * 100) : 0,
+      bunks_remaining: Math.max(0, Math.floor(presentCount / 0.75) - totalPlanned)
+    };
+  });
+
+  const grouped: Record<string, any> = {};
+  for (const r of result) {
+    if (!grouped[r.subject_name]) {
+      grouped[r.subject_name] = { ...r };
+    } else {
+      grouped[r.subject_name].attended += r.attended;
+      grouped[r.subject_name].absent += r.absent;
+      grouped[r.subject_name].total_held += r.total_held;
+      grouped[r.subject_name].total_planned += r.total_planned;
+      const g = grouped[r.subject_name];
+      g.percentage = g.total_held > 0 ? Math.round((g.attended / g.total_held) * 100) : 0;
+      g.bunks_remaining = Math.max(0, Math.floor(g.attended / 0.75) - g.total_planned);
     }
   }
 
-  const result = Object.values(subjectMap).map((s) => ({
-    subject_name: s.subject_name,
-    teacher: s.teacher,
-    color_hex: s.color_hex,
-    attended: s.present,
-    absent: s.absent,
-    total_held: s.total,
-    percentage: s.total > 0 ? Math.round((s.present / s.total) * 100) : 0,
-    bunks_remaining: s.total > 0
-      ? Math.max(0, Math.floor(s.present / 0.75) - s.total)
-      : 0,
-    needs_to_attend: s.total > 0 && (s.present / s.total) < 0.75
-      ? Math.ceil((0.75 * s.total - s.present) / 0.25)
-      : 0,
-  }));
-
-  return res.json(result);
+  return res.json(Object.values(grouped));
 });
 
 // ─────────────────────────────────────────────────────────────

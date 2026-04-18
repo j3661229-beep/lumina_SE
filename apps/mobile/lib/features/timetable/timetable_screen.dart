@@ -6,6 +6,7 @@ import '../../core/theme/design_tokens.dart';
 import '../../shared/widgets/shimmer_widgets.dart';
 import 'timetable_provider.dart';
 import 'edit_slot_sheet.dart';
+import '../../shared/providers/profile_provider.dart';
 
 class TimetableScreen extends ConsumerStatefulWidget {
   const TimetableScreen({super.key});
@@ -152,7 +153,7 @@ class _TimetableScreenState extends ConsumerState<TimetableScreen> {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ── Indigo gradient header ──────────────────────────────────
+              // ── Premium glass header ──────────────────────────────────
               _Header(
                 todayLabel: todayLabel,
                 classesToday: todaySlots.length,
@@ -164,85 +165,84 @@ class _TimetableScreenState extends ConsumerState<TimetableScreen> {
                 onScan: () => context.go('/ocr'),
               ),
 
-              // ── Today's timeline ────────────────────────────────────────
+              // ── Semester Progress Banner ──────────────────────────────
+              if (slots.isNotEmpty) _SemesterProgressBanner(),
+
+              // ── Main Content Area ──────────────────────────────────────
               Expanded(
                 child: RefreshIndicator(
                   color: AppColors.indigo,
                   backgroundColor: Theme.of(context).colorScheme.surface,
                   onRefresh: () async => ref.invalidate(timetableProvider),
-                  child: ListView(
-                  padding: const EdgeInsets.fromLTRB(18, 0, 18, 24),
-                  children: [
-                    if (slots.isEmpty)
-                      _EmptyTimetable(onScan: () => context.go('/ocr'))
-                    else ...[
-                      // ── Today's schedule ──────────────────────────────
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 12, top: 4),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text("Today's Schedule",
-                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                fontFamily: 'Syne', fontWeight: FontWeight.w700,
-                              color: Theme.of(context).colorScheme.onSurface)),
-                            GestureDetector(
-                              onTap: () => context.go('/bunk'),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                                decoration: BoxDecoration(
-                                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.06),
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.1)),
+                  child: slots.isEmpty
+                    ? ListView(padding: const EdgeInsets.all(18), children: [_EmptyTimetable(onScan: () => context.go('/ocr'))])
+                    : CustomScrollView(
+                        physics: const BouncingScrollPhysics(),
+                        slivers: [
+                          // ── Today's Vertical Timeline ─────────────────
+                          SliverPadding(
+                            padding: const EdgeInsets.fromLTRB(18, 10, 18, 20),
+                            sliver: SliverToBoxAdapter(
+                              child: Text("Today's Journey",
+                                style: TextStyle(
+                                  fontFamily: 'Syne', fontWeight: FontWeight.w800, fontSize: 18,
+                                  color: Theme.of(context).colorScheme.onSurface)),
+                            ),
+                          ),
+                          if (todaySlots.isEmpty)
+                            SliverPadding(
+                              padding: const EdgeInsets.symmetric(horizontal: 18),
+                              sliver: SliverToBoxAdapter(child: _FreeDayCard()),
+                            )
+                          else
+                            SliverPadding(
+                              padding: const EdgeInsets.symmetric(horizontal: 18),
+                              sliver: SliverList(
+                                delegate: SliverChildBuilderDelegate(
+                                  (ctx, i) => _TimelineItem(
+                                    slot: todaySlots[i],
+                                    isFirst: i == 0,
+                                    isLast: i == todaySlots.length - 1,
+                                    analytics: items.firstWhere(
+                                      (a) => a['subject_name'] == todaySlots[i]['subject']['name'],
+                                      orElse: () => {},
+                                    ),
+                                  ),
+                                  childCount: todaySlots.length,
                                 ),
-                                child: Text('📊 Analytics',
-                                  style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
-                                    fontSize: 11, fontWeight: FontWeight.w600)),
                               ),
                             ),
-                          ],
-                        ),
-                      ),
-                      if (todaySlots.isEmpty)
-                        Container(
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(
-                            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.04),
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.08)),
-                          ),
-                          child: Row(children: [
-                            const Text('🎉', style: TextStyle(fontSize: 20)),
-                            const SizedBox(width: 12),
-                            Text('Free day! No classes today.',
-                              style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5), fontSize: 13)),
-                          ]),
-                        )
-                      else
-                        _TimelineList(slots: todaySlots, palette: _slotPalette),
 
-                      // ── Rest of week ──────────────────────────────────
-                      const SizedBox(height: 20),
-                      Text('All Days',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontFamily: 'Syne', fontWeight: FontWeight.w700,
-                          color: Theme.of(context).colorScheme.onSurface)),
-                      const SizedBox(height: 12),
-                      ...List.generate(_days.length, (i) {
-                        final day = _daysFull[i];
-                        final daySlots = grouped[day] ?? [];
-                        return _DaySection(
-                          dayAbbr: _days[i],
-                          dayFull: day,
-                          slots: daySlots,
-                          palette: _slotPalette,
-                          isToday: day == todayKey,
-                        );
-                      }),
-                    ],
-                  ],
+                          // ── Weekly Overview ────────────────────────────
+                          SliverPadding(
+                            padding: const EdgeInsets.fromLTRB(18, 30, 18, 10),
+                            sliver: SliverToBoxAdapter(
+                              child: Text("Weekly Glimpse",
+                                style: TextStyle(
+                                  fontFamily: 'Syne', fontWeight: FontWeight.w800, fontSize: 18,
+                                  color: Theme.of(context).colorScheme.onSurface)),
+                            ),
+                          ),
+                          SliverPadding(
+                            padding: const EdgeInsets.fromLTRB(18, 0, 18, 50),
+                            sliver: SliverList(
+                              delegate: SliverChildBuilderDelegate(
+                                (ctx, i) {
+                                  final day = _daysFull[i];
+                                  if (day == todayKey) return const SizedBox.shrink();
+                                  return _DaySummaryCard(
+                                    dayAbbr: _days[i],
+                                    dayFull: day,
+                                    slots: grouped[day] ?? [],
+                                  );
+                                },
+                                childCount: _daysFull.length,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                 ),
-                ),  // closes RefreshIndicator
               ),
             ],
           );
@@ -418,183 +418,424 @@ class _StatPill extends StatelessWidget {
   );
 }
 
-// ── Timeline list for today's slots ──────────────────────────────────────────
-class _TimelineList extends ConsumerWidget {
-  final List<dynamic> slots;
-  final List<Color> palette;
-  const _TimelineList({required this.slots, required this.palette});
-
+class _SemesterProgressBanner extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return Column(
-      children: List.generate(slots.length, (i) {
-        final slot = slots[i];
-        final slotId = slot['id'] as String? ?? '';
-        final subject = slot['subject'] as Map<String, dynamic>? ?? {};
-        final colorHex = subject['color_hex'] as String? ?? '#6366F1';
-        Color slotColor;
-        try {
-          slotColor = Color(int.parse(colorHex.replaceFirst('#', 'FF'), radix: 16));
-        } catch (_) {
-          slotColor = palette[i % palette.length];
-        }
-        final slotType = slot['slot_type'] as String? ?? 'Lecture';
-        final startTime = slot['start_time'] as String? ?? '';
-        final endTime = slot['end_time'] as String? ?? '';
-        final String todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
-        final logsMap = ref.watch(attendanceLogsProvider).value ?? {};
-        final marked = logsMap['${slotId}_$todayStr'];
-
-        Future<void> handleMark(String status) async {
-          try {
-            await ref.read(timetableProvider.notifier).markAttendance(slotId, todayStr, status);
-            if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                content: Text(status == 'present' ? '✅ Marked present' : '🚫 Marked absent'),
-                backgroundColor: status == 'present' ? AppColors.green : AppColors.rose,
-                duration: const Duration(seconds: 1),
-              ));
-            }
-          } catch (e) {
-            debugPrint('[Timeline] mark failed: $e');
-            if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                content: Text('Failed to save attendance'),
-                backgroundColor: AppColors.rose,
-              ));
-            }
-          }
-        }
-
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Left time + connector
-            SizedBox(
-              width: 52,
-              child: Column(children: [
-                const SizedBox(height: 14),
-                Text(startTime, style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.35), fontSize: 10, height: 1)),
+    final profileAsync = ref.watch(profileProvider);
+    
+    return profileAsync.when(
+      data: (profile) {
+        final startStr = profile['semester_start'] as String?;
+        final endStr = profile['semester_end'] as String?;
+        
+        if (startStr == null || endStr == null) return const SizedBox.shrink();
+        
+        final start = DateTime.parse(startStr);
+        final end = DateTime.parse(endStr);
+        final now = DateTime.now();
+        
+        if (now.isBefore(start) || now.isAfter(end)) return const SizedBox.shrink();
+        
+        final totalDays = end.difference(start).inDays;
+        final daysPassed = now.difference(start).inDays;
+        final progress = (daysPassed / totalDays).clamp(0.0, 1.0);
+        final currentWeek = (daysPassed / 7).ceil();
+        
+        return Container(
+          margin: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: AppColors.indigo.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.indigo.withOpacity(0.2)),
+          ),
+          child: Row(children: [
+            const Icon(Icons.auto_awesome, color: AppColors.indigo, size: 20),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('Week $currentWeek of Semester', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: AppColors.indigo, fontFamily: 'Syne')),
+                Text('Keep going! ${(progress * 100).round()}% of your cycle is complete.', style: TextStyle(fontSize: 11, color: AppColors.indigo.withOpacity(0.7))),
               ]),
             ),
-            // Dot + line
-            Column(children: [
-              const SizedBox(height: 12),
-              Container(
-                width: 10, height: 10,
-                decoration: BoxDecoration(
-                  color: slotColor,
-                  shape: BoxShape.circle,
-                  boxShadow: [BoxShadow(color: slotColor.withOpacity(0.6), blurRadius: 8)],
-                ),
-              ),
-              if (i < slots.length - 1)
-                Container(
-                  width: 2, height: 82,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [slotColor.withOpacity(0.6), Colors.transparent],
-                      begin: Alignment.topCenter, end: Alignment.bottomCenter,
-                    ),
-                    borderRadius: BorderRadius.circular(1),
-                  ),
-                ),
-            ]),
-            const SizedBox(width: 10),
-            // Card
-            Expanded(
-              child: GestureDetector(
-                onTap: () => showEditSlotSheet(context, ref, slot),
-                child: Container(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.05),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border(left: BorderSide(color: slotColor, width: 3)),
-                    boxShadow: [
-                      BoxShadow(
-                        color: slotColor.withOpacity(0.07),
-                        blurRadius: 12,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
-                  ),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text(subject['name'] ?? 'Unknown',
-                          style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontWeight: FontWeight.w700, fontSize: 13, fontFamily: 'Syne')),
-                        Text('$startTime – $endTime · ${slotType[0].toUpperCase()}${slotType.substring(1)}',
-                          style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4), fontSize: 10, height: 1.5)),
-                      ])),
-                      _TypePill(label: slotType, color: slotColor),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  // ── Attendance action row ──────────────────────────────
-                  if (marked != null)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: (marked == 'present' ? AppColors.green : AppColors.rose).withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(mainAxisSize: MainAxisSize.min, children: [
-                        Icon(marked == 'present' ? Icons.check_circle_outline : Icons.cancel_outlined,
-                          size: 13, color: marked == 'present' ? AppColors.green : AppColors.rose),
-                        const SizedBox(width: 5),
-                        Text(marked == 'present' ? 'Marked Present' : 'Marked Absent',
-                          style: TextStyle(
-                            fontSize: 11, fontWeight: FontWeight.w600,
-                            color: marked == 'present' ? AppColors.green : AppColors.rose)),
-                      ]),
-                    )
-                  else
-                    Row(children: [
-                      Expanded(child: GestureDetector(
-                        onTap: slotId.isEmpty ? null : () => handleMark('present'),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 6),
-                          decoration: BoxDecoration(
-                            color: AppColors.green.withOpacity(0.12),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: AppColors.green.withOpacity(0.3)),
-                          ),
-                          child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                            Icon(Icons.check_rounded, size: 13, color: AppColors.green),
-                            SizedBox(width: 4),
-                            Text('Present', style: TextStyle(color: AppColors.green, fontSize: 11, fontWeight: FontWeight.w700)),
-                          ]),
-                        ),
-                      )),
-                      const SizedBox(width: 8),
-                      Expanded(child: GestureDetector(
-                        onTap: slotId.isEmpty ? null : () => handleMark('absent'),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 6),
-                          decoration: BoxDecoration(
-                            color: AppColors.rose.withOpacity(0.12),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: AppColors.rose.withOpacity(0.3)),
-                          ),
-                          child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                            Icon(Icons.close_rounded, size: 13, color: AppColors.rose),
-                            SizedBox(width: 4),
-                            Text('Bunk', style: TextStyle(color: AppColors.rose, fontSize: 11, fontWeight: FontWeight.w700)),
-                          ]),
-                        ),
-                      )),
-                    ]),
-                ]),
-              ),
+            SizedBox(
+              width: 40, height: 40,
+              child: CircularProgressIndicator(
+                value: progress, 
+                strokeWidth: 5, 
+                backgroundColor: AppColors.indigo.withOpacity(0.1),
+                color: AppColors.indigo,
               ),
             ),
-          ],
+          ]),
         );
-      }),
+      },
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+    );
+  }
+}
+
+class _TimelineItem extends ConsumerStatefulWidget {
+  final dynamic slot;
+  final bool isFirst, isLast;
+  final Map<String, dynamic> analytics;
+
+  const _TimelineItem({required this.slot, required this.isFirst, required this.isLast, required this.analytics});
+
+  @override
+  ConsumerState<_TimelineItem> createState() => _TimelineItemState();
+}
+
+class _TimelineItemState extends ConsumerState<_TimelineItem> {
+  bool _isEditing = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final slot = widget.slot;
+    final slotId = slot['id'] as String? ?? '';
+    final subject = slot['subject'] as Map<String, dynamic>? ?? {};
+    final colorHex = subject['color_hex'] as String? ?? '#6366F1';
+    final Color slotColor = Color(int.parse(colorHex.replaceFirst('#', 'FF'), radix: 16));
+    
+    final startTime = slot['start_time'] as String? ?? '';
+    final endTime = slot['end_time'] as String? ?? '';
+    final todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final logsMap = ref.watch(attendanceLogsProvider).value ?? {};
+    final marked = logsMap['${slotId}_$todayStr'];
+
+    final bunksLeft = widget.analytics['bunks_remaining'] ?? 0;
+
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // ── Timeline Stem ──────────────────────────────────────
+          SizedBox(
+            width: 30,
+            child: Column(children: [
+              Container(
+                width: 12, height: 12,
+                decoration: BoxDecoration(
+                  color: slotColor, shape: BoxShape.circle,
+                  boxShadow: [BoxShadow(color: slotColor.withOpacity(0.5), blurRadius: 8)],
+                  border: Border.all(color: Colors.white, width: 2),
+                ),
+              ),
+              if (!widget.isLast)
+                Expanded(
+                  child: Container(width: 2, color: slotColor.withOpacity(0.2)),
+                ),
+            ]),
+          ),
+          // ── Content Card ───────────────────────────────────────
+          Expanded(
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 24),
+              decoration: AppStyles.glassCard(context).copyWith(
+                 border: Border.all(color: slotColor.withOpacity(0.2)),
+              ),
+              child: InkWell(
+                onTap: () => showEditSlotSheet(context, ref, slot),
+                borderRadius: BorderRadius.circular(16),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                      Text(startTime, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: slotColor)),
+                      _TypePill(label: slot['slot_type'] ?? 'lecture', color: slotColor),
+                    ]),
+                    const SizedBox(height: 8),
+                    Text(subject['name'] ?? 'Unknown', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16, fontFamily: 'Syne')),
+                    if (subject['teacher'] != null)
+                      Text('with ${subject['teacher']}', style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5))),
+                    const SizedBox(height: 12),
+                    
+                    // ── Analytics / Actions ───────────────────────
+                    if (marked != null && !_isEditing)
+                      _AttendanceIndicator(
+                        status: marked, 
+                        onEdit: () => setState(() => _isEditing = true)
+                      )
+                    else
+                      _AttendanceActions(
+                        slotId: slotId, 
+                        todayStr: todayStr, 
+                        onMark: (s) async {
+                          await ref.read(timetableProvider.notifier).markAttendance(slotId, todayStr, s);
+                          setState(() => _isEditing = false);
+                        }
+                      ),
+                    
+                    const SizedBox(height: 12),
+                    const Divider(height: 1),
+                    const SizedBox(height: 8),
+                    Row(children: [
+                      const Icon(Icons.info_outline, size: 12, color: AppColors.indigo),
+                      const SizedBox(width: 6),
+                      Text('Bunk budget: You can miss $bunksLeft more this year.', 
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: (bunksLeft as num) > 0 ? AppColors.indigo : AppColors.rose)),
+                    ]),
+                  ]),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AttendanceIndicator extends ConsumerWidget {
+  final String status;
+  final VoidCallback? onEdit;
+  const _AttendanceIndicator({required this.status, this.onEdit});
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => Row(
+    children: [
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: (status == 'present' ? AppColors.green : AppColors.rose).withOpacity(0.12),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(status == 'present' ? Icons.check_circle : Icons.cancel, size: 14, color: status == 'present' ? AppColors.green : AppColors.rose),
+          const SizedBox(width: 6),
+          Text(status == 'present' ? 'Present' : 'Bunked', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: status == 'present' ? AppColors.green : AppColors.rose)),
+        ]),
+      ),
+      const SizedBox(width: 4),
+      // Use InkWell for better hit area than a tiny TextButton
+      InkWell(
+        onTap: onEdit,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.edit_outlined, size: 12, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4)),
+              const SizedBox(width: 4),
+              Text('Edit', style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4), fontWeight: FontWeight.w600)),
+            ],
+          ),
+        ),
+      ),
+    ],
+  );
+}
+
+class _AttendanceActions extends StatefulWidget {
+  final String slotId, todayStr;
+  final Future<void> Function(String) onMark;
+  const _AttendanceActions({required this.slotId, required this.todayStr, required this.onMark});
+
+  @override
+  State<_AttendanceActions> createState() => _AttendanceActionsState();
+}
+
+class _AttendanceActionsState extends State<_AttendanceActions> {
+  String? _loadingStatus;
+
+  Future<void> _handleMark(String status) async {
+    setState(() => _loadingStatus = status);
+    try {
+      await widget.onMark(status);
+    } finally {
+      if (mounted) setState(() => _loadingStatus = null);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Row(children: [
+    Expanded(child: _ActionBtn(
+      label: 'Present', 
+      icon: Icons.check, 
+      color: AppColors.green, 
+      isLoading: _loadingStatus == 'present',
+      onTap: () => _handleMark('present')
+    )),
+    const SizedBox(width: 10),
+    Expanded(child: _ActionBtn(
+      label: 'Bunk', 
+      icon: Icons.close, 
+      color: AppColors.rose, 
+      isLoading: _loadingStatus == 'absent',
+      onTap: () => _handleMark('absent')
+    )),
+  ]);
+}
+
+class _ActionBtn extends StatelessWidget {
+  final String label; final IconData icon; final Color color; final VoidCallback onTap; final bool isLoading;
+  const _ActionBtn({required this.label, required this.icon, required this.color, required this.onTap, this.isLoading = false});
+
+  @override
+  Widget build(BuildContext context) => OutlinedButton.icon(
+    onPressed: isLoading ? null : onTap,
+    icon: isLoading 
+      ? SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: color))
+      : Icon(icon, size: 14), 
+    label: Text(label),
+    style: OutlinedButton.styleFrom(
+      foregroundColor: color, side: BorderSide(color: color.withOpacity(0.3)),
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+    ),
+  );
+}
+
+class _DaySummaryCard extends ConsumerWidget {
+  final String dayAbbr, dayFull;
+  final List<dynamic> slots;
+  const _DaySummaryCard({required this.dayAbbr, required this.dayFull, required this.slots});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => Container(
+    margin: const EdgeInsets.only(bottom: 12),
+    decoration: AppStyles.glassCard(context),
+    child: InkWell(
+      onTap: () => _showDayDetail(context, ref, dayFull, slots),
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(children: [
+          Container(
+            width: 45, height: 45,
+            decoration: BoxDecoration(color: AppColors.indigo.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
+            child: Center(child: Text(dayAbbr, style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.indigo, fontFamily: 'Syne'))),
+          ),
+          const SizedBox(width: 16),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(dayFull[0].toUpperCase() + dayFull.substring(1), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+            Text('${slots.length} classes scheduled', style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5))),
+          ])),
+          Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.3)),
+        ]),
+      ),
+    ),
+  );
+
+  void _showDayDetail(BuildContext context, WidgetRef ref, String day, List<dynamic> daySlots) {
+    // Calculate the date for this day in the current week
+    final now = DateTime.now();
+    final dayIndex = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'].indexOf(day.toLowerCase());
+    final currentDayIndex = now.weekday - 1; // 0 = Monday
+    final dateForDay = now.add(Duration(days: dayIndex - currentDayIndex));
+    final dateStr = DateFormat('yyyy-MM-dd').format(dateForDay);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        height: MediaQuery.of(context).size.height * 0.8,
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        padding: const EdgeInsets.all(24),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(day[0].toUpperCase() + day.substring(1), style: const TextStyle(fontFamily: 'Syne', fontWeight: FontWeight.w800, fontSize: 22)),
+              Text(DateFormat('MMMM d, yyyy').format(dateForDay), style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5))),
+            ]),
+            IconButton(onPressed: () => Navigator.pop(ctx), icon: const Icon(Icons.close)),
+          ]),
+          const SizedBox(height: 20),
+          Expanded(
+            child: daySlots.isEmpty 
+              ? const Center(child: Text('No classes this day!'))
+              : ListView.builder(
+                  itemCount: daySlots.length,
+                  itemBuilder: (ctx, i) {
+                    return _BottomSheetSlotItem(
+                      slot: daySlots[i],
+                      dateStr: dateStr,
+                    );
+                  },
+                ),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+class _FreeDayCard extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(30),
+    decoration: AppStyles.glassCard(context),
+    child: Column(children: [
+      const Text('🎉', style: TextStyle(fontSize: 40)),
+      const SizedBox(height: 12),
+      const Text('Free day!', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18, fontFamily: 'Syne')),
+      Text('No classes scheduled for today. Time to relax or study!', textAlign: TextAlign.center, style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5))),
+    ]),
+  );
+}
+
+class _BottomSheetSlotItem extends ConsumerStatefulWidget {
+  final dynamic slot;
+  final String dateStr;
+  const _BottomSheetSlotItem({required this.slot, required this.dateStr});
+
+  @override
+  ConsumerState<_BottomSheetSlotItem> createState() => _BottomSheetSlotItemState();
+}
+
+class _BottomSheetSlotItemState extends ConsumerState<_BottomSheetSlotItem> {
+  bool _isEditing = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final slot = widget.slot;
+    final slotId = slot['id'] as String? ?? '';
+    final subject = slot['subject'] as Map<String, dynamic>? ?? {};
+    final colorHex = subject['color_hex'] as String? ?? '#6366F1';
+    final color = Color(int.parse(colorHex.replaceFirst('#', 'FF'), radix: 16));
+    
+    final logsMap = ref.watch(attendanceLogsProvider).value ?? {};
+    final marked = logsMap['${slotId}_${widget.dateStr}'];
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: AppStyles.glassCard(context).copyWith(
+        border: Border.all(color: color.withOpacity(0.2)),
+      ),
+      child: Column(children: [
+        Row(children: [
+          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(slot['start_time'], style: TextStyle(fontWeight: FontWeight.w700, color: color)),
+            Text(slot['end_time'], style: TextStyle(fontSize: 10, color: color.withOpacity(0.5))),
+          ]),
+          const SizedBox(width: 16),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(subject['name'] ?? 'Unknown', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+            Text(slot['slot_type'] ?? 'Lecture', style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5))),
+          ])),
+        ]),
+        const SizedBox(height: 12),
+        if (marked != null && !_isEditing)
+          _AttendanceIndicator(
+            status: marked, 
+            onEdit: () => setState(() => _isEditing = true)
+          )
+        else
+          _AttendanceActions(
+            slotId: slotId, 
+            todayStr: widget.dateStr, 
+            onMark: (s) async {
+              await ref.read(timetableProvider.notifier).markAttendance(slotId, widget.dateStr, s);
+              setState(() => _isEditing = false);
+            }
+          ),
+      ]),
     );
   }
 }

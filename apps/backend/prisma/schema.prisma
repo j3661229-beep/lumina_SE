@@ -112,12 +112,15 @@ model Profile {
   batch       String?  @db.VarChar(10)
   fcmToken     String?  @map("fcm_token")
   weeklyBudget Float?   @default(2000.0) @map("weekly_budget")
-  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  semesterStart DateTime? @map("semester_start") @db.Date
+  semesterEnd   DateTime? @map("semester_end") @db.Date
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   subjects             Subject[]
   timetableSlots       TimetableSlot[]
   attendanceLogs       AttendanceLog[]
+  holidays             Holiday[]
   contextSwitchLogs    ContextSwitchLog[]
   cognitiveDebtScores  CognitiveDebtScore[]
   sentMessages         Message[]            @relation("SentMessages")
@@ -370,4 +373,17 @@ model Expense {
 
   @@index([userId, expenseDate(sort: Desc)])
   @@map("expenses")
+}
+
+model Holiday {
+  id        String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  name      String
+  date      DateTime @db.Date
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@map("holidays")
 }
