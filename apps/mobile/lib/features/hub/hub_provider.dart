@@ -27,10 +27,14 @@ final hubProvider = StateNotifierProvider<HubNotifier, AsyncValue<void>>(
 class HubNotifier extends StateNotifier<AsyncValue<void>> {
   HubNotifier() : super(const AsyncData(null));
 
-  Future<void> createGroup(String name, String? description) async {
+  Future<void> createGroup(String name, String? description, {String category = 'general'}) async {
     state = const AsyncLoading();
     try {
-      await ApiClient.instance.post('/groups', data: {'name': name, 'description': description});
+      await ApiClient.instance.post('/groups', data: {
+        'name': name,
+        'description': description,
+        'category': category,
+      });
       state = const AsyncData(null);
     } catch (e, st) {
       state = AsyncError(e, st);

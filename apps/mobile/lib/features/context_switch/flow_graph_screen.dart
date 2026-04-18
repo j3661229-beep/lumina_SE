@@ -20,6 +20,15 @@ class FlowGraphScreen extends ConsumerWidget {
           style: TextStyle(fontFamily: 'Syne', fontWeight: FontWeight.w800)),
         actions: [
           IconButton(
+            icon: const Icon(Icons.auto_awesome, color: DesignColor.amber),
+            tooltip: 'Generate Demo Data',
+            onPressed: () async {
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Seeding demo data...')));
+              await ref.read(contextSwitchProvider.notifier).seedDemoData();
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✨ Demo Data Generated!'), backgroundColor: DesignColor.green));
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.refresh_outlined, color: DesignColor.sub),
             onPressed: () => ref.invalidate(contextSwitchProvider),
           ),

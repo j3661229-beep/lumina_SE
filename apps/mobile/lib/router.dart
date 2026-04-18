@@ -9,7 +9,7 @@ import 'features/timetable/bunk_analytics_screen.dart';
 import 'features/hub/group_chat_screen.dart';
 import 'features/hub/whiteboard_screen.dart';
 import 'features/hub/pasteboard_screen.dart';
-import 'features/kanban/kanban_screen.dart';
+import 'features/kanban/kanban_screen.dart'; // exports KanbanScreen + MyTasksKanbanScreen
 import 'features/calendar/heatmap_screen.dart';
 import 'features/profile/profile_screen.dart';
 import 'features/expenses/expense_screen.dart';
@@ -81,6 +81,10 @@ final router = GoRouter(
     GoRoute(
       path: '/kanban/:groupId',
       builder: (ctx, state) => KanbanScreen(groupId: state.pathParameters['groupId']!),
+    ),
+    GoRoute(
+      path: '/my-tasks',
+      builder: (_, __) => const MyTasksKanbanScreen(),
     ),
   ],
 );

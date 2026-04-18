@@ -28,26 +28,19 @@ class ContextSwitchNotifier extends AsyncNotifier<CognitiveState> {
   }
 
   Future<CognitiveState> _fetchState() async {
-    try {
-      final data = await ApiClient.instance.get<List<dynamic>>('/context-switch/score');
-      final list = List<Map<String, dynamic>>.from(data);
-      final score = list.isEmpty ? 0.0 : (list.first['score'] as num).toDouble();
-      return CognitiveState(score: score, history: list);
-    } catch (_) {
-      // Return demo data if backend not reachable yet
-      return CognitiveState(score: 32.0, history: _demoHistory());
-    }
+    final data = await ApiClient.instance.get<List<dynamic>>('/context-switch/score');
+    final list = List<Map<String, dynamic>>.from(data);
+    final score = list.isEmpty ? 0.0 : (list.first['score'] as num).toDouble();
+    return CognitiveState(score: score, history: list);
   }
 
-  static List<Map<String, dynamic>> _demoHistory() {
-    final now = DateTime.now();
-    return List.generate(7, (i) {
-      final day = now.subtract(Duration(days: 6 - i));
-      return {
-        'score': [12.0, 45.0, 28.0, 67.0, 33.0, 55.0, 32.0][i],
-        'windowDate': day.toIso8601String(),
-      };
-    });
+  Future<void> seedDemoData() async {
+    try {
+      await ApiClient.instance.post('/demo/seed', data: {});
+      state = await AsyncValue.guard(_fetchState);
+    } catch (e) {
+      print('Demo seed failed: $e');
+    }
   }
 
   Future<void> logSession({

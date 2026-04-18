@@ -15,6 +15,7 @@ import expensesRouter from './routes/expenses';
 import groupsRouter from './routes/groups';
 import authRouter from './routes/auth';
 import profileRouter from './routes/profile';
+import demoRouter from './routes/demo';
 
 const app = express();
 
@@ -40,6 +41,7 @@ app.use('/api/gmail', gmailRouter);
 app.use('/api/expenses', expensesRouter);
 app.use('/api/groups', groupsRouter);
 app.use('/api/profile', profileRouter);
+app.use('/api/demo', demoRouter);
 
 // Global error handler
 app.use(

@@ -37,11 +37,14 @@ router.post(
   '/',
   requireAuth,
   body('name').isString().trim().notEmpty().withMessage('Group name required'),
+  body('category').optional().isString().isIn([
+    'general', 'study_focus', 'hackathon', 'project', 'lab', 'social'
+  ]).withMessage('Invalid category'),
   async (req: AuthRequest, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(422).json({ error: errors.array()[0].msg });
 
-    const { name, description } = req.body as { name: string; description?: string };
+    const { name, description, category } = req.body as { name: string; description?: string; category?: string };
     const userId = req.userId!;
 
     // Upsert profile first (foreign key requirement)
@@ -49,7 +52,7 @@ router.post(
 
     const group = await prisma.$transaction(async (tx) => {
       const g = await tx.group.create({
-        data: { name, description, createdBy: userId },
+        data: { name, description, category: category ?? 'general', createdBy: userId },
       });
       await tx.groupMember.create({
         data: { groupId: g.id, profileId: userId, role: 'admin' },

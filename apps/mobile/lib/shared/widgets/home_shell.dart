@@ -193,7 +193,19 @@ class GroupsScreen extends ConsumerStatefulWidget {
   ConsumerState<GroupsScreen> createState() => _GroupsScreenState();
 }
 
+// Group categories definition
+const _kGroupCategories = [
+  (id: 'general',     label: 'General',     icon: Icons.people_outline,           color: Color(0xFF94A3B8)),
+  (id: 'study_focus', label: 'Study Focus', icon: Icons.menu_book_outlined,        color: Color(0xFF6366F1)),
+  (id: 'hackathon',   label: 'Hackathon',   icon: Icons.rocket_launch_outlined,    color: Color(0xFFF59E0B)),
+  (id: 'project',     label: 'Project',     icon: Icons.build_circle_outlined,     color: Color(0xFF10B981)),
+  (id: 'lab',         label: 'Lab / Prac',  icon: Icons.science_outlined,          color: Color(0xFF22D3EE)),
+  (id: 'social',      label: 'Social',      icon: Icons.celebration_outlined,      color: Color(0xFFF43F5E)),
+];
+
 class _GroupsScreenState extends ConsumerState<GroupsScreen> {
+  String _categoryFilter = 'all'; // 'all' or a category id
+
   @override
   Widget build(BuildContext context) {
     final groupsAsync = ref.watch(groupsProvider);
@@ -210,36 +222,86 @@ class _GroupsScreenState extends ConsumerState<GroupsScreen> {
               padding: EdgeInsets.only(right: 16),
               child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: DesignColor.indigo)),
             ),
+          // My Tasks shortcut
+          IconButton(
+            icon: const Icon(Icons.checklist_rtl_outlined, color: DesignColor.sub),
+            tooltip: 'My Tasks',
+            onPressed: () => context.push('/my-tasks'),
+          ),
           IconButton(
             icon: const Icon(Icons.refresh_outlined, color: DesignColor.sub),
             onPressed: () => ref.invalidate(groupsProvider),
           ),
         ],
       ),
-      body: groupsAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator(color: DesignColor.indigo)),
-        error: (e, _) => _ErrorState(message: e.toString(), onRetry: () => ref.invalidate(groupsProvider)),
-        data: (groups) {
-          if (groups.isEmpty) return _EmptyState(
-            onCreate: () => _showCreateSheet(context),
-            onJoin: () => _showJoinSheet(context),
-          );
-          return RefreshIndicator(
-            color: DesignColor.indigo,
-            backgroundColor: DesignColor.s1,
-            onRefresh: () async => ref.invalidate(groupsProvider),
-            child: ListView.separated(
-              padding: const EdgeInsets.all(16),
-              itemCount: groups.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 10),
-              itemBuilder: (ctx, i) {
-                final g = groups[i] as Map<String, dynamic>;
-                return _GroupCard(group: g);
-              },
+      body: Column(children: [
+        // ── Category filter chips ────────────────────────────────────────
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+          child: Row(children: [
+            _FilterChip(
+              label: 'All',
+              icon: Icons.grid_view_outlined,
+              color: DesignColor.indigo,
+              selected: _categoryFilter == 'all',
+              onTap: () => setState(() => _categoryFilter = 'all'),
             ),
-          );
-        },
-      ),
+            const SizedBox(width: 8),
+            ..._kGroupCategories.map((cat) => Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: _FilterChip(
+                label: cat.label,
+                icon: cat.icon,
+                color: cat.color,
+                selected: _categoryFilter == cat.id,
+                onTap: () => setState(() => _categoryFilter = cat.id == _categoryFilter ? 'all' : cat.id),
+              ),
+            )),
+          ]),
+        ),
+        // ── Groups list ─────────────────────────────────────────────────
+        Expanded(child: groupsAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator(color: DesignColor.indigo)),
+          error: (e, _) => _ErrorState(message: e.toString(), onRetry: () => ref.invalidate(groupsProvider)),
+          data: (groups) {
+            // Filter by category
+            final filtered = _categoryFilter == 'all'
+                ? groups
+                : groups.where((g) {
+                    final cat = (g as Map<String, dynamic>)['category'] as String? ?? 'general';
+                    return cat == _categoryFilter;
+                  }).toList();
+
+            if (groups.isEmpty) return _EmptyState(
+              onCreate: () => _showCreateSheet(context),
+              onJoin: () => _showJoinSheet(context),
+            );
+            if (filtered.isEmpty) return Center(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                const Icon(Icons.filter_list_off_outlined, size: 48, color: DesignColor.muted),
+                const SizedBox(height: 12),
+                Text('No squads in this category',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(color: DesignColor.sub)),
+              ]),
+            );
+            return RefreshIndicator(
+              color: DesignColor.indigo,
+              backgroundColor: DesignColor.s1,
+              onRefresh: () async => ref.invalidate(groupsProvider),
+              child: ListView.separated(
+                padding: const EdgeInsets.all(16),
+                itemCount: filtered.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 10),
+                itemBuilder: (ctx, i) {
+                  final g = filtered[i] as Map<String, dynamic>;
+                  return _GroupCard(group: g);
+                },
+              ),
+            );
+          },
+        )),
+      ]),
       floatingActionButton: Column(mainAxisSize: MainAxisSize.min, children: [
         FloatingActionButton.small(
           heroTag: 'join_fab',
@@ -268,19 +330,20 @@ class _GroupsScreenState extends ConsumerState<GroupsScreen> {
   void _showCreateSheet(BuildContext ctx) {
     final nameCtrl = TextEditingController();
     final descCtrl = TextEditingController();
+    String selectedCategory = 'general';
 
     showModalBottomSheet(
       context: ctx,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (sheetCtx) => Container(
+      builder: (sheetCtx) => StatefulBuilder(builder: (sheetCtx2, setSheet) => Container(
         decoration: const BoxDecoration(
           color: Color(0xFF0F1228),
           borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
           border: Border(top: BorderSide(color: DesignColor.borderH)),
         ),
         padding: EdgeInsets.only(
-          bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + 20,
+          bottom: MediaQuery.of(sheetCtx2).viewInsets.bottom + 20,
           left: 20, right: 20, top: 20,
         ),
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -297,6 +360,37 @@ class _GroupsScreenState extends ConsumerState<GroupsScreen> {
           _DarkTextField(controller: nameCtrl, label: 'Squad name *', hint: 'e.g. OS Study Group', icon: Icons.people_outline),
           const SizedBox(height: 12),
           _DarkTextField(controller: descCtrl, label: 'Description (optional)', icon: Icons.notes_outlined),
+          const SizedBox(height: 16),
+          // ── Category picker ──────────────────────────────────────────
+          const Text('Category', style: TextStyle(color: DesignColor.sub, fontSize: 12, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(children: _kGroupCategories.map((cat) {
+              final sel = selectedCategory == cat.id;
+              return GestureDetector(
+                onTap: () => setSheet(() => selectedCategory = cat.id),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  margin: const EdgeInsets.only(right: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: sel ? cat.color.withOpacity(0.2) : DesignColor.s1,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: sel ? cat.color : DesignColor.border, width: sel ? 1.5 : 1),
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(cat.icon, size: 13, color: sel ? cat.color : DesignColor.muted),
+                    const SizedBox(width: 5),
+                    Text(cat.label, style: TextStyle(
+                      fontSize: 12, fontWeight: sel ? FontWeight.w700 : FontWeight.w500,
+                      color: sel ? cat.color : DesignColor.sub,
+                    )),
+                  ]),
+                ),
+              );
+            }).toList()),
+          ),
           const SizedBox(height: 20),
           SizedBox(
             width: double.infinity,
@@ -306,8 +400,12 @@ class _GroupsScreenState extends ConsumerState<GroupsScreen> {
                 onPressed: () async {
                   final name = nameCtrl.text.trim();
                   if (name.isEmpty) return;
-                  Navigator.pop(sheetCtx);
-                  await ref.read(hubProvider.notifier).createGroup(name, descCtrl.text.trim().isEmpty ? null : descCtrl.text.trim());
+                  Navigator.pop(sheetCtx2);
+                  await ref.read(hubProvider.notifier).createGroup(
+                    name,
+                    descCtrl.text.trim().isEmpty ? null : descCtrl.text.trim(),
+                    category: selectedCategory,
+                  );
                   ref.invalidate(groupsProvider);
                   if (mounted) {
                     final err = ref.read(hubProvider).error;
@@ -330,7 +428,7 @@ class _GroupsScreenState extends ConsumerState<GroupsScreen> {
             ),
           ),
         ]),
-      ),
+      )),
     );
   }
 
@@ -459,6 +557,40 @@ class _DarkTextField extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Filter Chip widget
+// ─────────────────────────────────────────────────────────────────────────────
+class _FilterChip extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final Color color;
+  final bool selected;
+  final VoidCallback onTap;
+  const _FilterChip({required this.label, required this.icon, required this.color, required this.selected, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: selected ? color.withOpacity(0.18) : DesignColor.s1,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: selected ? color : DesignColor.border, width: selected ? 1.5 : 1),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, size: 12, color: selected ? color : DesignColor.muted),
+        const SizedBox(width: 5),
+        Text(label, style: TextStyle(
+          fontSize: 11, fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+          color: selected ? color : DesignColor.sub,
+        )),
+      ]),
+    ),
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Group Card
 // ─────────────────────────────────────────────────────────────────────────────
 class _GroupCard extends ConsumerWidget {
@@ -471,10 +603,17 @@ class _GroupCard extends ConsumerWidget {
     final desc = group['description'] as String?;
     final role = group['role'] as String? ?? 'member';
     final inviteCode = group['inviteCode'] as String? ?? '';
+    final categoryId = group['category'] as String? ?? 'general';
     final gId = group['id'] as String;
 
     final hue = name.codeUnits.fold(0, (a, b) => a + b) % 360;
     final avatarColor = HSLColor.fromAHSL(1, hue.toDouble(), 0.65, 0.55).toColor();
+
+    // Find category meta
+    final catMeta = _kGroupCategories.firstWhere(
+      (c) => c.id == categoryId,
+      orElse: () => _kGroupCategories.first,
+    );
 
     return Container(
       decoration: DesignStyles.glassCard(),
@@ -507,6 +646,7 @@ class _GroupCard extends ConsumerWidget {
                 Row(children: [
                   Expanded(child: Text(name,
                     style: const TextStyle(color: DesignColor.text, fontWeight: FontWeight.w700, fontSize: 15, fontFamily: 'Syne'))),
+                  // Admin badge
                   if (role == 'admin')
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -518,6 +658,20 @@ class _GroupCard extends ConsumerWidget {
                       child: const Text('Admin', style: TextStyle(fontSize: 9, color: DesignColor.indigo, fontWeight: FontWeight.w700)),
                     ),
                 ]),
+                const SizedBox(height: 4),
+                // Category chip
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: catMeta.color.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(catMeta.icon, size: 10, color: catMeta.color),
+                    const SizedBox(width: 4),
+                    Text(catMeta.label, style: TextStyle(fontSize: 10, color: catMeta.color, fontWeight: FontWeight.w700)),
+                  ]),
+                ),
                 if (desc != null) ...[
                   const SizedBox(height: 3),
                   Text(desc, maxLines: 1, overflow: TextOverflow.ellipsis,
@@ -534,12 +688,15 @@ class _GroupCard extends ConsumerWidget {
                 onSelected: (val) {
                   if (val == 'chat') context.push('/hub/$gId');
                   if (val == 'whiteboard') context.go('/whiteboard/$gId');
+                  if (val == 'my_tasks') context.push('/my-tasks');
                 },
                 itemBuilder: (_) => const [
                   PopupMenuItem(value: 'chat',
                     child: ListTile(leading: Icon(Icons.chat_outlined, color: DesignColor.sub), title: Text('Open Chat', style: TextStyle(color: DesignColor.text)), dense: true)),
                   PopupMenuItem(value: 'whiteboard',
                     child: ListTile(leading: Icon(Icons.draw_outlined, color: DesignColor.sub), title: Text('Whiteboard', style: TextStyle(color: DesignColor.text)), dense: true)),
+                  PopupMenuItem(value: 'my_tasks',
+                    child: ListTile(leading: Icon(Icons.checklist_rtl_outlined, color: DesignColor.sub), title: Text('My Tasks', style: TextStyle(color: DesignColor.text)), dense: true)),
                 ],
               ),
             ]),

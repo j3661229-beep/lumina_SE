@@ -136,6 +136,7 @@ model Group {
   id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   name        String
   description String?
+  category    String   @default("general") @db.VarChar(30)
   inviteCode  String?  @unique @default(dbgenerated("substr(md5(random()::text), 1, 8)")) @map("invite_code")
   createdBy   String   @map("created_by") @db.Uuid
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)

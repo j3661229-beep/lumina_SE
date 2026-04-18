@@ -10,7 +10,7 @@ class GeminiRagService {
   static const _embedUrl =
       'https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent';
   static const _chatUrl =
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
 
   static final _dio = Dio(BaseOptions(
     connectTimeout: const Duration(seconds: 10),
@@ -100,7 +100,11 @@ ANSWER:'''
       );
       return res.data['candidates'][0]['content']['parts'][0]['text'] as String;
     } catch (e) {
-      return '⚠️ Could not generate answer: $e\n\nHere are the relevant passages:\n\n${chunks.join('\n\n---\n\n')}';
+      String errorMessage = e.toString();
+      if (e is DioException && e.response != null) {
+        errorMessage += '\nResponse DATA: ${e.response?.data}';
+      }
+      return '⚠️ Could not generate answer: $errorMessage\n\nHere are the relevant passages:\n\n${chunks.join('\n\n---\n\n')}';
     }
   }
 }
