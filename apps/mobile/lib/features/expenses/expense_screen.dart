@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/theme/design_tokens.dart';
 import 'expense_provider.dart';
 import 'expense_cats.dart';
 
@@ -22,19 +23,23 @@ class ExpenseScreen extends ConsumerStatefulWidget {
 
 class _ExpenseScreenState extends ConsumerState<ExpenseScreen>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _fab = AnimationController(
-    vsync: this, duration: const Duration(milliseconds: 260),
-  );
+  late final AnimationController _fab;
+
+  @override
+  void initState() {
+    super.initState();
+    _fab = AnimationController(vsync: this, duration: const Duration(milliseconds: 260));
+  }
 
   @override
   void dispose() { _fab.dispose(); super.dispose(); }
 
   // ── Quick-add bottom sheet ────────────────────────────────────────────────
-  Future<void> _addExpense() async {
+  Future<void> _addExpense([dynamic existing]) async {
     HapticFeedback.mediumImpact();
-    final amountCtrl = TextEditingController();
-    final noteCtrl   = TextEditingController();
-    String selCat    = 'food';
+    final amountCtrl = TextEditingController(text: existing != null ? _toDouble(existing['amount']).toStringAsFixed(2) : '');
+    final noteCtrl   = TextEditingController(text: existing?['description'] as String? ?? '');
+    String selCat    = existing?['category'] as String? ?? 'food';
 
     await showModalBottomSheet(
       context: context,
@@ -49,14 +54,15 @@ class _ExpenseScreenState extends ConsumerState<ExpenseScreen>
               bottom: MediaQuery.of(ctx2).viewInsets.bottom + 24,
               left: 20, right: 20, top: 20,
             ),
-            decoration: BoxDecoration(
-              color: Theme.of(ctx2).colorScheme.surface,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            decoration: const BoxDecoration(
+              color: Color(0xFF0F1228),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+              border: Border(top: BorderSide(color: DesignColor.borderH)),
             ),
             child: Column(mainAxisSize: MainAxisSize.min, children: [
               // Pill handle
               Container(width: 40, height: 4,
-                decoration: BoxDecoration(color: Colors.grey.shade400, borderRadius: BorderRadius.circular(2))),
+                decoration: BoxDecoration(color: DesignColor.muted, borderRadius: BorderRadius.circular(2))),
               const SizedBox(height: 16),
 
               // Selected category badge
@@ -150,11 +156,17 @@ class _ExpenseScreenState extends ConsumerState<ExpenseScreen>
                     if (a == null || a <= 0) return;
                     HapticFeedback.heavyImpact();
                     Navigator.pop(ctx);
-                    await ref.read(expenseProvider.notifier)
-                        .addExpense(a, selCat, noteCtrl.text.trim().isEmpty ? null : noteCtrl.text.trim());
+                    final note = noteCtrl.text.trim().isEmpty ? null : noteCtrl.text.trim();
+                    if (existing != null) {
+                      await ref.read(expenseProvider.notifier)
+                          .updateExpense(existing['id'], a, selCat, note);
+                    } else {
+                      await ref.read(expenseProvider.notifier)
+                          .addExpense(a, selCat, note);
+                    }
                   },
                   icon: const Icon(Icons.check_rounded),
-                  label: const Text('Log Expense', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                  label: Text(existing != null ? 'Update Expense' : 'Log Expense', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
                 ),
               ),
             ]),
@@ -171,25 +183,37 @@ class _ExpenseScreenState extends ConsumerState<ExpenseScreen>
     final expenses = ref.watch(expenseProvider);
 
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF0F1117) : const Color(0xFFF7F8FD),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _addExpense,
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('Log', style: TextStyle(fontWeight: FontWeight.w700)),
-        backgroundColor: cs.primary,
-        foregroundColor: cs.onPrimary,
+      backgroundColor: DesignColor.bg,
+      floatingActionButton: Container(
+        decoration: DesignStyles.gradientButton(),
+        child: FloatingActionButton.extended(
+          onPressed: _addExpense,
+          backgroundColor: Colors.transparent,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          icon: const Icon(Icons.add_rounded),
+          label: const Text('Log', style: TextStyle(fontWeight: FontWeight.w700)),
+        ),
       ),
       body: expenses.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const Center(child: CircularProgressIndicator(color: DesignColor.indigo)),
         error: (e, _) => Center(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            const Icon(Icons.wifi_off_outlined, size: 48),
+            const Icon(Icons.wifi_off_outlined, size: 48, color: DesignColor.rose),
             const SizedBox(height: 12),
-            Text('$e', textAlign: TextAlign.center),
+            Text('$e', textAlign: TextAlign.center, style: const TextStyle(color: DesignColor.sub)),
             const SizedBox(height: 12),
-            FilledButton(
-              onPressed: () => ref.invalidate(expenseProvider),
-              child: const Text('Retry'),
+            Container(
+              decoration: DesignStyles.gradientButton(),
+              child: FilledButton(
+                onPressed: () => ref.invalidate(expenseProvider),
+                style: FilledButton.styleFrom(
+                  backgroundColor: Colors.transparent,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                ),
+                child: const Text('Retry'),
+              ),
             ),
           ]),
         ),
@@ -217,13 +241,15 @@ class _ExpenseBody extends StatelessWidget {
 
   final List<dynamic> expenses;
   final Future<void> Function(String) onDelete;
-  final VoidCallback onAdd, onWrap;
+  final void Function([dynamic]) onAdd;
+  final VoidCallback onWrap;
   final Future<void> Function() onRefresh;
 
   @override
   Widget build(BuildContext context) {
     final cs     = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final size   = MediaQuery.sizeOf(context);
     final now    = DateTime.now();
     final fmt    = DateFormat('yyyy-MM-dd');
 
@@ -231,7 +257,7 @@ class _ExpenseBody extends StatelessWidget {
     double todayTotal = 0, weekTotal = 0, monthTotal = 0;
     final weekStart = now.subtract(Duration(days: now.weekday - 1));
     for (final e in expenses) {
-      final raw = e['expense_date'] as String? ?? '';
+      final raw = e['expenseDate'] as String? ?? e['expense_date'] as String? ?? '';
       final d   = DateTime.tryParse(raw.split('T')[0]);
       final amt = _toDouble(e['amount']);
       if (d == null) continue;
@@ -243,7 +269,7 @@ class _ExpenseBody extends StatelessWidget {
     // Group by date
     final Map<String, List<dynamic>> grouped = {};
     for (final e in expenses) {
-      final key = (e['expense_date'] as String? ?? '').split('T')[0];
+      final key = (e['expenseDate'] as String? ?? e['expense_date'] as String? ?? '').split('T')[0];
       grouped.putIfAbsent(key, () => []).add(e);
     }
     final days = grouped.keys.toList()..sort((a, b) => b.compareTo(a));
@@ -255,14 +281,14 @@ class _ExpenseBody extends StatelessWidget {
           // ── SliverAppBar ────────────────────────────────────────────────
           SliverAppBar(
             pinned: true,
-            expandedHeight: 200,
-            backgroundColor: cs.primary,
+            expandedHeight: size.height > 800 ? 240 : 200,
+            backgroundColor: DesignColor.indigo,
             flexibleSpace: FlexibleSpaceBar(
               background: Container(
-                decoration: BoxDecoration(
+                decoration: const BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topLeft, end: Alignment.bottomRight,
-                    colors: [cs.primary, cs.secondary, cs.tertiary],
+                    colors: [DesignColor.indigo, Color(0xFF8B5CF6), DesignColor.cyan],
                   ),
                 ),
                 child: SafeArea(
@@ -324,14 +350,14 @@ class _ExpenseBody extends StatelessWidget {
                   (ctx, i) {
                     final e   = grouped[day]![i];
                     final cat = catFor(e['category'] as String? ?? 'other');
-                    return _ExpenseTile(e: e, cat: cat, onDelete: onDelete);
+                    return _ExpenseTile(e: e, cat: cat, onDelete: onDelete, onTap: () => onAdd(e));
                   },
                   childCount: grouped[day]!.length,
                 ),
               ),
             ],
 
-            const SliverToBoxAdapter(child: SizedBox(height: 96)),
+            SliverToBoxAdapter(child: SizedBox(height: size.height * 0.15)),
           ],
         ],
       ),
@@ -346,9 +372,10 @@ class _SummaryPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(label, style: TextStyle(color: color, fontSize: 11)),
+      Text(label, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w500)),
+      const SizedBox(height: 2),
       Text('₹${value.toStringAsFixed(0)}',
-        style: TextStyle(color: color, fontWeight: FontWeight.w800, fontSize: 18)),
+        style: TextStyle(color: color, fontWeight: FontWeight.w800, fontSize: 18, fontFamily: 'Syne')),
     ]);
 }
 
@@ -367,20 +394,17 @@ class _CategoryBar extends StatelessWidget {
 
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.5),
-        borderRadius: BorderRadius.circular(16),
-      ),
+      decoration: DesignStyles.glassCard(),
       padding: const EdgeInsets.all(16),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('This Month by Category',
-          style: Theme.of(context).textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w700)),
+        const Text('This Month by Category',
+          style: TextStyle(color: DesignColor.text, fontWeight: FontWeight.w700, fontSize: 13, fontFamily: 'Syne')),
         const SizedBox(height: 12),
         // Stacked bar
         ClipRRect(
           borderRadius: BorderRadius.circular(8),
           child: SizedBox(
-            height: 12,
+            height: 10,
             child: Row(
               children: totals.entries.map((entry) {
                 final cat = catFor(entry.key);
@@ -399,9 +423,9 @@ class _CategoryBar extends StatelessWidget {
             return Row(mainAxisSize: MainAxisSize.min, children: [
               Container(width: 8, height: 8, decoration: BoxDecoration(
                 color: cat.color, shape: BoxShape.circle)),
-              const SizedBox(width: 4),
+              const SizedBox(width: 6),
               Text('${cat.emoji} ₹${e.value.toStringAsFixed(0)}',
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                style: const TextStyle(color: DesignColor.sub, fontSize: 11, fontWeight: FontWeight.w600)),
             ]);
           }).toList(),
         ),
@@ -415,7 +439,6 @@ class _DayHeader extends StatelessWidget {
   final String day; final List<dynamic> items;
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     final d = DateTime.tryParse(day);
     final label = d == null ? day
         : DateFormat.yMMMd().format(d);
@@ -424,25 +447,25 @@ class _DayHeader extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
       child: Row(children: [
-        Text(label, style: TextStyle(
-          color: cs.primary, fontWeight: FontWeight.w800, fontSize: 13)),
+        Text(label, style: const TextStyle(
+          color: DesignColor.indigo, fontWeight: FontWeight.w800, fontSize: 13, fontFamily: 'Syne')),
         const Spacer(),
         Text('₹${subtotal.toStringAsFixed(2)}',
-          style: TextStyle(color: cs.outline, fontSize: 12, fontWeight: FontWeight.w600)),
+          style: const TextStyle(color: DesignColor.muted, fontSize: 11, fontWeight: FontWeight.w600)),
       ]),
     );
   }
 }
 
 class _ExpenseTile extends StatelessWidget {
-  const _ExpenseTile({required this.e, required this.cat, required this.onDelete});
+  const _ExpenseTile({required this.e, required this.cat, required this.onDelete, required this.onTap});
   final dynamic e;
   final ExpenseCat cat;
   final Future<void> Function(String) onDelete;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 3),
       child: Dismissible(
@@ -453,40 +476,35 @@ class _ExpenseTile extends StatelessWidget {
           alignment: Alignment.centerRight,
           padding: const EdgeInsets.only(right: 20),
           decoration: BoxDecoration(
-            color: cs.errorContainer, borderRadius: BorderRadius.circular(16)),
-          child: Icon(Icons.delete_outline_rounded, color: cs.error),
+            color: DesignColor.rose.withOpacity(0.12), borderRadius: BorderRadius.circular(16)),
+          child: const Icon(Icons.delete_outline_rounded, color: DesignColor.rose),
         ),
         child: Container(
-          decoration: BoxDecoration(
-            color: cs.surface,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 8, offset: const Offset(0, 2))],
-          ),
-          child: ListTile(
-            leading: Container(
-              width: 44, height: 44,
-              decoration: BoxDecoration(
-                color: cat.color.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(12),
+          decoration: DesignStyles.glassCard(),
+            child: ListTile(
+              onTap: onTap,
+              leading: Container(
+                width: 44, height: 44,
+                decoration: BoxDecoration(
+                  color: cat.color.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Center(child: Text(cat.emoji, style: const TextStyle(fontSize: 22))),
               ),
-              child: Center(child: Text(cat.emoji, style: const TextStyle(fontSize: 22))),
-            ),
-            title: Text(
-              e['description'] as String? ?? cat.label,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-            subtitle: Text(cat.label,
-              style: TextStyle(color: cat.color, fontSize: 12, fontWeight: FontWeight.w500)),
-            trailing: Text(
-              '₹${_toDouble(e['amount']).toStringAsFixed(2)}',
-              style: TextStyle(
-                fontWeight: FontWeight.w800, color: cat.color, fontSize: 16),
+              title: Text(
+                e['description'] as String? ?? cat.label,
+                style: const TextStyle(color: DesignColor.text, fontWeight: FontWeight.w600, fontSize: 14),
+              ),
+              subtitle: Text(cat.label,
+                style: TextStyle(color: cat.color, fontSize: 12, fontWeight: FontWeight.w500)),
+              trailing: Text(
+                '₹${_toDouble(e['amount']).toStringAsFixed(2)}',
+                style: TextStyle(
+                  fontWeight: FontWeight.w800, color: cat.color, fontSize: 16, fontFamily: 'Syne'),
+              ),
             ),
           ),
         ),
-      ),
     );
   }
 }

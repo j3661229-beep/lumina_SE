@@ -12,9 +12,10 @@ class ApiClient {
           'API_BASE_URL',
           defaultValue: 'http://10.10.43.205:3000/api',
         ),
-        connectTimeout: const Duration(seconds: 10),
-        receiveTimeout: const Duration(seconds: 30),
-        headers: {'Content-Type': 'application/json'},
+        connectTimeout: const Duration(seconds: 15),
+        receiveTimeout: const Duration(seconds: 60),
+        // Do NOT set Content-Type here — let Dio set it per-request.
+        // Hardcoding 'application/json' breaks multipart/form-data file uploads.
       ),
     );
 

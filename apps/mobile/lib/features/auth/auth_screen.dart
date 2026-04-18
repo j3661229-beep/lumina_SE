@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:dio/dio.dart';
 import '../../core/network/api_client.dart';
+import '../../core/theme/design_tokens.dart';
 import 'auth_provider.dart';
 
 class AuthScreen extends ConsumerStatefulWidget {
@@ -121,103 +122,105 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     return Scaffold(
+      backgroundColor: DesignColor.bg,
       body: Container(
-        decoration: BoxDecoration(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: const BoxDecoration(
           gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [const Color(0xFF6366F1), const Color(0xFF8B5CF6), cs.surface],
-            stops: const [0.0, 0.4, 1.0],
+            colors: [Color(0xFF07091A), Color(0xFF0F1228), Color(0xFF07091A)],
+            begin: Alignment.topLeft, end: Alignment.bottomRight,
           ),
         ),
         child: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(28),
-              child: Column(children: [
-                // Logo
-                Container(
-                  width: 80, height: 80,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(24),
-                    boxShadow: [BoxShadow(
-                      color: const Color(0xFF6366F1).withOpacity(0.4),
-                      blurRadius: 20, offset: const Offset(0, 8),
-                    )],
-                  ),
-                  child: const Icon(Icons.auto_awesome, color: Color(0xFF6366F1), size: 44),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Column(children: [
+              const SizedBox(height: 60),
+              // Logo/Brand
+              Container(
+                width: 80, height: 80,
+                decoration: BoxDecoration(
+                  color: DesignColor.indigoGlow,
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(color: DesignColor.indigo.withOpacity(0.3)),
                 ),
-                const SizedBox(height: 20),
-                Text('Lumina', style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                  fontWeight: FontWeight.w800, color: Colors.white)),
-                Text('Your proactive engineering sidekick',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.white70)),
-                const SizedBox(height: 40),
-
-                // Auth card
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: cs.surface,
-                    borderRadius: BorderRadius.circular(24),
-                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 30)],
+                child: const Icon(Icons.auto_awesome, color: DesignColor.indigo, size: 44),
+              ),
+              const SizedBox(height: 24),
+              const Text('Lumina', style: TextStyle(
+                fontFamily: 'Syne', fontSize: 42, fontWeight: FontWeight.w800, color: Colors.white)),
+              const Text('Your proactive engineering sidekick',
+                style: TextStyle(color: DesignColor.sub, fontSize: 14)),
+              const SizedBox(height: 40),
+              // Auth card
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: DesignStyles.glassCard(),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  // Tabs
+                  Row(children: [
+                    Expanded(child: _TabBtn(label: 'Sign In', selected: _isLogin,
+                      onTap: () => setState(() { _isLogin = true; _error = null; }))),
+                    Expanded(child: _TabBtn(label: 'Sign Up', selected: !_isLogin,
+                      onTap: () => setState(() { _isLogin = false; _error = null; }))),
+                  ]),
+                  const SizedBox(height: 20),
+                  TextField(
+                    controller: _emailCtrl,
+                    decoration: const InputDecoration(labelText: 'Email', prefixIcon: Icon(Icons.email_outlined)),
+                    keyboardType: TextInputType.emailAddress,
                   ),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                    // Tabs
-                    Row(children: [
-                      Expanded(child: _TabBtn(label: 'Sign In', selected: _isLogin,
-                        onTap: () => setState(() { _isLogin = true; _error = null; }))),
-                      Expanded(child: _TabBtn(label: 'Sign Up', selected: !_isLogin,
-                        onTap: () => setState(() { _isLogin = false; _error = null; }))),
-                    ]),
-                    const SizedBox(height: 20),
-
-                    TextField(
-                      controller: _emailCtrl,
-                      decoration: const InputDecoration(labelText: 'Email', prefixIcon: Icon(Icons.email_outlined)),
-                      keyboardType: TextInputType.emailAddress,
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _passCtrl,
+                    decoration: const InputDecoration(labelText: 'Password', prefixIcon: Icon(Icons.lock_outline)),
+                    obscureText: true,
+                    onSubmitted: (_) => _emailAuth(),
+                  ),
+                  if (_error != null) ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: cs.errorContainer, borderRadius: BorderRadius.circular(10)),
+                      child: Text(_error!, style: TextStyle(color: cs.onErrorContainer, fontSize: 13)),
                     ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _passCtrl,
-                      decoration: const InputDecoration(labelText: 'Password', prefixIcon: Icon(Icons.lock_outline)),
-                      obscureText: true,
-                      onSubmitted: (_) => _emailAuth(),
-                    ),
-
-                    if (_error != null) ...[
-                      const SizedBox(height: 10),
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: cs.errorContainer, borderRadius: BorderRadius.circular(10)),
-                        child: Text(_error!, style: TextStyle(color: cs.onErrorContainer, fontSize: 13)),
-                      ),
-                    ],
-                    const SizedBox(height: 16),
-
-                    ElevatedButton(
+                  ],
+                  const SizedBox(height: 16),
+                  Container(
+                    decoration: DesignStyles.gradientButton(),
+                    child: FilledButton(
                       onPressed: _isLoading ? null : _emailAuth,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Colors.transparent,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
                       child: _isLoading
                         ? const SizedBox(width: 20, height: 20,
                             child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                        : Text(_isLogin ? 'Sign In' : 'Create Account'),
+                        : Text(_isLogin ? 'Sign In' : 'Create Account',
+                            style: const TextStyle(fontWeight: FontWeight.w700)),
                     ),
-                    const SizedBox(height: 12),
-                    OutlinedButton.icon(
-                      onPressed: _isLoading ? null : _googleAuth,
-                      icon: const Icon(Icons.g_mobiledata, size: 22),
-                      label: const Text('Continue with Google'),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: _isLoading ? null : _googleAuth,
+                    icon: const Icon(Icons.g_mobiledata, size: 28),
+                    label: const Text('Continue with Google'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      side: const BorderSide(color: DesignColor.borderH),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     ),
-                  ]),
-                ),
-              ]),
-            ),
+                  ),
+                ]),
+              ),
+              const SizedBox(height: 40),
+            ]),
           ),
         ),
       ),

@@ -3,8 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
-import 'package:pdfx/pdfx.dart';
+import 'package:dio/dio.dart';
+import 'package:go_router/go_router.dart';
+import '../../core/theme/design_tokens.dart';
 import 'timetable_provider.dart';
 
 class OcrParserScreen extends ConsumerStatefulWidget {
@@ -16,15 +17,6 @@ class OcrParserScreen extends ConsumerStatefulWidget {
 class _OcrParserScreenState extends ConsumerState<OcrParserScreen> {
   bool _isProcessing = false;
   List<ParsedSlot> _parsedSlots = [];
-
-  static const Map<String, List<String>> _dayAliases = {
-    'monday': ['mon', 'monday'],
-    'tuesday': ['tue', 'tuesday'],
-    'wednesday': ['wed', 'wednesday'],
-    'thursday': ['thu', 'thursday'],
-    'friday': ['fri', 'friday'],
-    'saturday': ['sat', 'saturday'],
-  };
 
   Future<void> _pickAndParse() async {
     setState(() => _isProcessing = true);
@@ -51,94 +43,50 @@ class _OcrParserScreenState extends ConsumerState<OcrParserScreen> {
 
       if (choice == null) { setState(() => _isProcessing = false); return; }
 
-      String extractedText = '';
+      String filePath = '';
 
       if (choice == 'pdf') {
         final result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['pdf']);
-        if (result == null) { setState(() => _isProcessing = false); return; }
-        extractedText = await _extractTextFromPdf(result.files.first.path!);
+        if (result == null || result.files.isEmpty) { setState(() => _isProcessing = false); return; }
+        filePath = result.files.first.path!;
+      } else if (choice == 'gallery') {
+        final result = await FilePicker.platform.pickFiles(type: FileType.image);
+        if (result == null || result.files.isEmpty) { setState(() => _isProcessing = false); return; }
+        filePath = result.files.first.path!;
       } else {
-        final source = choice == 'camera' ? ImageSource.camera : ImageSource.gallery;
-        final img = await ImagePicker().pickImage(source: source, imageQuality: 90);
+        final img = await ImagePicker().pickImage(source: ImageSource.camera, imageQuality: 90);
         if (img == null) { setState(() => _isProcessing = false); return; }
-        extractedText = await _ocrImage(img.path);
+        filePath = img.path;
       }
 
-      final slots = _parseText(extractedText);
+      final slots = await ref.read(timetableProvider.notifier).uploadTimetableImage(filePath);
+      
+      if (slots.isEmpty && mounted) {
+         ScaffoldMessenger.of(context).showSnackBar(
+           const SnackBar(content: Text('No classes found in image. Make sure the timetable is clear.')),
+         );
+      }
+      
       setState(() { _parsedSlots = slots; _isProcessing = false; });
     } catch (e) {
       setState(() => _isProcessing = false);
       if (mounted) {
+        String msg = e.toString();
+        if (e is DioException) {
+          if (e.response?.data is Map && e.response?.data['error'] != null) {
+            msg = e.response?.data['error']?.toString() ?? msg;
+          } else {
+            msg = e.message ?? msg;
+          }
+        }
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Theme.of(context).colorScheme.error),
+          SnackBar(content: Text('Error: $msg'), backgroundColor: Theme.of(context).colorScheme.error),
         );
       }
     }
   }
 
-  Future<String> _ocrImage(String path) async {
-    final recognizer = TextRecognizer(script: TextRecognitionScript.latin);
-    final recognized = await recognizer.processImage(InputImage.fromFilePath(path));
-    await recognizer.close();
-    return recognized.text;
-  }
-
-  Future<String> _extractTextFromPdf(String path) async {
-    final document = await PdfDocument.openFile(path);
-    final buffer = StringBuffer();
-    for (int i = 1; i <= document.pagesCount; i++) {
-      final page = await document.getPage(i);
-      final img = await page.render(width: page.width * 2, height: page.height * 2);
-      final file = File('${Directory.systemTemp.path}/lumina_page_$i.png');
-      await file.writeAsBytes(img!.bytes);
-      buffer.write(await _ocrImage(file.path));
-      await page.close();
-    }
-    await document.close();
-    return buffer.toString();
-  }
-
-  List<ParsedSlot> _parseText(String text) {
-    final slots = <ParsedSlot>[];
-    final lines = text.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
-    String currentDay = 'monday';
-    final timeRegex = RegExp(r'(\d{1,2})[:.h](\d{2})\s*[-–to]+\s*(\d{1,2})[:.h](\d{2})');
-
-    for (final line in lines) {
-      final lower = line.toLowerCase();
-      for (final entry in _dayAliases.entries) {
-        if (entry.value.any((alias) => lower.contains(alias))) {
-          currentDay = entry.key;
-          break;
-        }
-      }
-      final timeMatch = timeRegex.firstMatch(line);
-      if (timeMatch == null) continue;
-
-      final startH = int.parse(timeMatch.group(1)!).clamp(7, 20);
-      final startM = int.parse(timeMatch.group(2)!).clamp(0, 59);
-      final endH = int.parse(timeMatch.group(3)!).clamp(7, 20);
-      final endM = int.parse(timeMatch.group(4)!).clamp(0, 59);
-
-      final rest = line.substring(timeMatch.end).replaceAll(RegExp(r'[|/\\]'), '').trim();
-      if (rest.isEmpty || rest.length > 60) continue;
-
-      final slotType = rest.toLowerCase().contains('lab')
-          ? 'lab'
-          : rest.toLowerCase().contains('tutorial')
-              ? 'tutorial'
-              : 'lecture';
-
-      slots.add(ParsedSlot(
-        subjectName: rest,
-        dayOfWeek: currentDay,
-        startTime: '${startH.toString().padLeft(2, '0')}:${startM.toString().padLeft(2, '0')}',
-        endTime: '${endH.toString().padLeft(2, '0')}:${endM.toString().padLeft(2, '0')}',
-        slotType: slotType,
-      ));
-    }
-    return slots;
-  }
+  // Gemini handles extraction seamlessly now.
 
   Future<void> _uploadTimetable() async {
     if (_parsedSlots.isEmpty) return;
@@ -149,17 +97,33 @@ class _OcrParserScreenState extends ConsumerState<OcrParserScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('✅ Timetable uploaded!')),
       );
-      Navigator.pop(context);
+      context.go('/home');
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     return Scaffold(
-      appBar: AppBar(title: const Text('Import Timetable')),
+      backgroundColor: DesignColor.bg,
+      appBar: AppBar(
+        title: const Text('Import Timetable',
+          style: TextStyle(fontFamily: 'Syne', fontWeight: FontWeight.w800)),
+        backgroundColor: Colors.transparent,
+        leading: GestureDetector(
+          onTap: () => context.go('/home'),
+          child: Container(
+            margin: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: DesignColor.s1,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: DesignColor.border),
+            ),
+            child: const Icon(Icons.arrow_back_ios_new_rounded, size: 14, color: DesignColor.text),
+          ),
+        ),
+      ),
       body: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -167,42 +131,57 @@ class _OcrParserScreenState extends ConsumerState<OcrParserScreen> {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                gradient: LinearGradient(colors: [cs.primaryContainer, cs.secondaryContainer]),
+                gradient: const LinearGradient(
+                  colors: [Color(0x1A6366F1), Color(0x14A78BFA)],
+                  begin: Alignment.topLeft, end: Alignment.bottomRight,
+                ),
                 borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: DesignColor.borderH),
               ),
-              child: Row(children: [
-                const Icon(Icons.tips_and_updates_outlined, size: 28),
-                const SizedBox(width: 12),
+              child: const Row(children: [
+                Icon(Icons.tips_and_updates_outlined, size: 28, color: DesignColor.indigo),
+                SizedBox(width: 12),
                 Expanded(child: Text(
-                  'Take a photo of your timetable or upload a PDF. Lumina will auto-extract all slots.',
-                  style: TextStyle(color: cs.onPrimaryContainer),
+                  'Take a photo of your timetable or upload a PDF. Gemini AI will auto-extract all slots.',
+                  style: TextStyle(color: DesignColor.sub, fontSize: 13, height: 1.5),
                 )),
               ]),
             ),
             const SizedBox(height: 20),
-            ElevatedButton.icon(
-              onPressed: _isProcessing ? null : _pickAndParse,
-              icon: const Icon(Icons.document_scanner),
-              label: const Text('Scan Timetable'),
+            Container(
+              decoration: DesignStyles.gradientButton(),
+              child: ElevatedButton.icon(
+                onPressed: _isProcessing ? null : _pickAndParse,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.transparent,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                icon: const Icon(Icons.document_scanner),
+                label: const Text('Scan Timetable', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+              ),
             ),
             const SizedBox(height: 16),
             if (_isProcessing) const Center(child: Padding(
-              padding: EdgeInsets.all(20),
+              padding: EdgeInsets.all(24),
               child: Column(children: [
-                CircularProgressIndicator(),
-                SizedBox(height: 12),
-                Text('Processing...'),
+                CircularProgressIndicator(color: DesignColor.indigo),
+                SizedBox(height: 14),
+                Text('Gemini is analysing your timetable...', style: TextStyle(color: DesignColor.sub, fontSize: 13)),
               ]),
             )),
             if (_parsedSlots.isNotEmpty) ...[
               Row(children: [
                 Text('${_parsedSlots.length} slots found',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                  style: const TextStyle(
+                    fontFamily: 'Syne', fontWeight: FontWeight.w700,
+                    color: DesignColor.text, fontSize: 16)),
                 const Spacer(),
                 TextButton.icon(
                   onPressed: () => setState(() => _parsedSlots = []),
-                  icon: const Icon(Icons.clear, size: 16),
-                  label: const Text('Clear'),
+                  icon: const Icon(Icons.clear, size: 14, color: DesignColor.rose),
+                  label: const Text('Clear', style: TextStyle(color: DesignColor.rose)),
                 ),
               ]),
               const SizedBox(height: 8),
@@ -217,30 +196,43 @@ class _OcrParserScreenState extends ConsumerState<OcrParserScreen> {
                       background: Container(
                         alignment: Alignment.centerRight,
                         padding: const EdgeInsets.only(right: 16),
-                        color: cs.errorContainer,
-                        child: Icon(Icons.delete, color: cs.error),
+                        color: DesignColor.rose.withOpacity(0.2),
+                        child: const Icon(Icons.delete, color: DesignColor.rose),
                       ),
                       onDismissed: (_) => setState(() => _parsedSlots.removeAt(i)),
-                      child: Card(
+                      child: Container(
+                        margin: const EdgeInsets.only(bottom: 6),
+                        decoration: DesignStyles.glassCard(),
                         child: ListTile(
                           leading: CircleAvatar(
-                            backgroundColor: cs.primaryContainer,
+                            backgroundColor: DesignColor.indigoGlow,
                             child: Text(s.dayOfWeek.substring(0, 3).toUpperCase(),
-                              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800)),
+                              style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: DesignColor.indigo)),
                           ),
-                          title: Text(s.subjectName, style: const TextStyle(fontWeight: FontWeight.w600)),
-                          subtitle: Text('${s.startTime} – ${s.endTime}  •  ${s.slotType}'),
+                          title: Text(s.subjectName, style: const TextStyle(color: DesignColor.text, fontWeight: FontWeight.w600)),
+                          subtitle: Text(
+                            '${s.startTime} – ${s.endTime}  •  ${s.slotType}${s.teacher != null ? ' • ${s.teacher}' : ''}',
+                            style: const TextStyle(color: DesignColor.muted, fontSize: 12)),
                         ),
                       ),
                     );
                   },
                 ),
               ),
-              const SizedBox(height: 12),
-              ElevatedButton.icon(
-                onPressed: _isProcessing ? null : _uploadTimetable,
-                icon: const Icon(Icons.cloud_upload_outlined),
-                label: Text('Upload ${_parsedSlots.length} Slots'),
+              const SizedBox(height: 14),
+              Container(
+                decoration: DesignStyles.gradientButton(),
+                child: ElevatedButton.icon(
+                  onPressed: _isProcessing ? null : _uploadTimetable,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.transparent,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  icon: const Icon(Icons.cloud_upload_outlined),
+                  label: Text('Save ${_parsedSlots.length} Slots', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                ),
               ),
             ],
           ],
@@ -252,12 +244,15 @@ class _OcrParserScreenState extends ConsumerState<OcrParserScreen> {
 
 class ParsedSlot {
   final String subjectName, dayOfWeek, startTime, endTime, slotType;
+  final String? teacher;
+  
   const ParsedSlot({
     required this.subjectName,
     required this.dayOfWeek,
     required this.startTime,
     required this.endTime,
     required this.slotType,
+    this.teacher,
   });
   Map<String, dynamic> toJson() => {
     'subject_name': subjectName,
@@ -265,5 +260,6 @@ class ParsedSlot {
     'start_time': startTime,
     'end_time': endTime,
     'slot_type': slotType,
+    if (teacher != null) 'teacher': teacher,
   };
 }

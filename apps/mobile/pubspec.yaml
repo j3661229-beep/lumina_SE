@@ -71,6 +71,8 @@ dependencies:
   permission_handler: ^11.3.1
   connectivity_plus: ^6.0.3
   flutter_inappwebview: ^6.0.0
+  shared_preferences: ^2.5.3
+  app_usage: ^4.1.0
 
 dev_dependencies:
   flutter_test:

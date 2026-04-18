@@ -3,8 +3,12 @@ import { body, validationResult } from 'express-validator';
 import { prisma } from '../config/prisma';
 import { requireAuth, AuthRequest } from '../middleware/auth';
 import { DayOfWeek, AttendanceStatus } from '@prisma/client';
+import multer from 'multer';
+import { GoogleGenAI, Type } from '@google/genai';
 
 const router = Router();
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+
 
 async function ensureProfile(userId: string) {
   await prisma.profile.upsert({
@@ -15,6 +19,78 @@ async function ensureProfile(userId: string) {
 }
 
 // ─────────────────────────────────────────────────────────────
+// DELETE /api/timetable — Wipe entire timetable for user
+// ─────────────────────────────────────────────────────────────
+router.delete('/', requireAuth, async (req: AuthRequest, res) => {
+  // Cascading deletes on Subject will wipe timetableSlots and attendanceLogs
+  await prisma.subject.deleteMany({
+    where: { userId: req.userId! },
+  });
+  return res.json({ message: 'Timetable deleted successfully.' });
+});
+
+// ─────────────────────────────────────────────────────────────
+// POST /api/timetable/upload-ocr — Pass image to Gemini AI
+// ─────────────────────────────────────────────────────────────
+router.post('/upload-ocr', requireAuth, upload.single('file'), async (req: AuthRequest, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded.' });
+  if (!process.env.GEMINI_API_KEY) return res.status(500).json({ error: 'GEMINI_API_KEY is not configured.' });
+
+  console.log(`[OCR] File received: ${req.file.originalname}, size: ${req.file.size} bytes, mime: ${req.file.mimetype}`);
+
+  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+  try {
+    console.log('[OCR] Sending to Gemini...');
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            { text: 'Extract the class timetable from this document. Identify the subject name, the assigned teacher (if available), the day of the week (lowercase long format like "monday"), the start time (HH:mm 24-hr format), and the end time (HH:mm 24-hr format). Ignore blank slots or recess/lunch.' },
+            { inlineData: { data: req.file.buffer.toString('base64'), mimeType: req.file.mimetype } }
+          ]
+        }
+      ],
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            slots: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  subject_name: { type: Type.STRING },
+                  teacher: { type: Type.STRING, nullable: true },
+                  day_of_week: { type: Type.STRING, enum: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] },
+                  start_time: { type: Type.STRING, description: "HH:mm format 24hr" },
+                  end_time: { type: Type.STRING, description: "HH:mm format 24hr" },
+                  slot_type: { type: Type.STRING, enum: ['lecture', 'lab', 'tutorial'] },
+                  room: { type: Type.STRING, nullable: true }
+                },
+                required: ['subject_name', 'day_of_week', 'start_time', 'end_time', 'slot_type']
+              }
+            }
+          },
+          required: ['slots']
+        }
+      }
+    });
+
+    const text = response.text;
+    if (!text) return res.status(500).json({ error: 'Failed to extract data via OCR.' });
+
+    const cleanedText = text.replace(/^```json\n?/, '').replace(/\n?```$/, '').trim();
+    return res.json(JSON.parse(cleanedText));
+  } catch (e: any) {
+    console.error('Gemini OCR Error:', e);
+    return res.status(500).json({ error: 'Failed to process image through AI OCR.' });
+  }
+});
+
 // POST /api/timetable/slots — Bulk upsert OCR-parsed timetable
 // ─────────────────────────────────────────────────────────────
 router.post(
@@ -32,7 +108,7 @@ router.post(
     const userId = req.userId!;
     await ensureProfile(userId);
     const { slots } = req.body as {
-      slots: Array<{ subject_name: string; day_of_week: DayOfWeek; start_time: string; end_time: string; room?: string; slot_type?: string }>;
+      slots: Array<{ subject_name: string; teacher?: string; day_of_week: DayOfWeek; start_time: string; end_time: string; room?: string; slot_type?: string }>;
     };
 
     // Upsert subjects by name — return id map
@@ -40,10 +116,13 @@ router.post(
     const subjectMap: Record<string, string> = {};
 
     for (const name of subjectNames) {
+      const match = slots.find(s => s.subject_name === name && s.teacher);
+      const teacher = match?.teacher ?? null;
+
       const subject = await prisma.subject.upsert({
         where: { userId_name: { userId, name } },
-        create: { userId, name },
-        update: {},
+        create: { userId, name, teacher },
+        update: { ...(teacher && { teacher }) },
         select: { id: true, name: true },
       });
       subjectMap[name] = subject.id;
@@ -95,7 +174,27 @@ router.get('/slots', requireAuth, async (req: AuthRequest, res) => {
     },
     orderBy: [{ dayOfWeek: 'asc' }, { startTime: 'asc' }],
   });
-  return res.json(slots);
+
+  // Transform to snake_case so the Flutter client can read all fields correctly
+  const result = slots.map((s) => ({
+    id:          s.id,
+    user_id:     s.userId,
+    subject_id:  s.subjectId,
+    day_of_week: s.dayOfWeek,   // enum → 'monday' | 'tuesday' …
+    start_time:  s.startTime,
+    end_time:    s.endTime,
+    room:        s.room,
+    slot_type:   s.slotType,
+    created_at:  s.createdAt,
+    subject: {
+      name:      s.subject.name,
+      code:      s.subject.code,
+      color_hex: s.subject.colorHex,
+      teacher:   s.subject.teacher,
+    },
+  }));
+
+  return res.json(result);
 });
 
 // ─────────────────────────────────────────────────────────────
@@ -129,11 +228,54 @@ router.post(
 // (reads the materialized view via $queryRaw)
 // ─────────────────────────────────────────────────────────────
 router.get('/bunk-analytics', requireAuth, async (req: AuthRequest, res) => {
-  const data = await prisma.$queryRaw`
-    SELECT * FROM public.attendance_summary
-    WHERE user_id = ${req.userId!}::uuid
-  `;
-  return res.json(data);
+  const userId = req.userId!;
+
+  // Get all slots for the user with their attendance logs
+  const slots = await prisma.timetableSlot.findMany({
+    where: { userId },
+    include: {
+      subject: { select: { name: true, teacher: true, colorHex: true } },
+      attendanceLogs: { select: { status: true } },
+    },
+  });
+
+  // Aggregate per subject
+  const subjectMap: Record<string, {
+    subject_name: string; teacher: string | null; color_hex: string;
+    total: number; present: number; absent: number; cancelled: number;
+  }> = {};
+
+  for (const slot of slots) {
+    const name = slot.subject.name;
+    if (!subjectMap[name]) {
+      subjectMap[name] = {
+        subject_name: name,
+        teacher: slot.subject.teacher,
+        color_hex: slot.subject.colorHex,
+        total: 0, present: 0, absent: 0, cancelled: 0,
+      };
+    }
+    for (const log of slot.attendanceLogs) {
+      subjectMap[name].total++;
+      if (log.status === 'present')   subjectMap[name].present++;
+      if (log.status === 'absent')    subjectMap[name].absent++;
+      if (log.status === 'cancelled') subjectMap[name].cancelled++;
+    }
+  }
+
+  const result = Object.values(subjectMap).map((s) => ({
+    ...s,
+    attendance_pct: s.total > 0 ? Math.round((s.present / s.total) * 100) : null,
+    // 75% rule: need to attend at least 75% → can bunk floor((total * 0.25)) more
+    can_bunk: s.total > 0
+      ? Math.max(0, Math.floor(s.present / 0.75) - s.total)
+      : null,
+    needs_to_attend: s.total > 0 && (s.present / s.total) < 0.75
+      ? Math.ceil((0.75 * s.total - s.present) / 0.25)
+      : 0,
+  }));
+
+  return res.json(result);
 });
 
 export default router;

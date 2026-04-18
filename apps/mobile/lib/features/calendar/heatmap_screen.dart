@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import 'dart:async';
 import '../../core/network/api_client.dart';
+import '../../core/theme/design_tokens.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Provider
@@ -19,10 +20,10 @@ final heatmapProvider = FutureProvider<Map<String, dynamic>>((ref) async {
 // Stress palette — Google-quality colors
 // ─────────────────────────────────────────────────────────────────────────────
 const _kStress = {
-  'low':      _StressStyle(Color(0xFF00897B), Color(0xFFB2DFDB), '😌', 'Relaxed'),
-  'medium':   _StressStyle(Color(0xFF3949AB), Color(0xFFC5CAE9), '📘', 'Productive'),
-  'high':     _StressStyle(Color(0xFFE65100), Color(0xFFFFE0B2), '⚡', 'Tight'),
-  'critical': _StressStyle(Color(0xFFC62828), Color(0xFFFFCDD2), '🔥', 'Crunch!'),
+  'low':      _StressStyle(DesignColor.green, Color(0x2210B981), '😌', 'Relaxed'),
+  'medium':   _StressStyle(DesignColor.cyan,  Color(0x2206B6D4), '📘', 'Normal'),
+  'high':     _StressStyle(DesignColor.amber, Color(0x22F59E0B), '⚡', 'Busy'),
+  'critical': _StressStyle(DesignColor.rose,  Color(0x22EF4444), '🔥', 'Crunch!'),
 };
 
 class _StressStyle {
@@ -190,14 +191,12 @@ class _HeatmapScreenState extends ConsumerState<HeatmapScreen>
     final heatAsync = ref.watch(heatmapProvider);
 
     // Background
-    final bg = isDark ? const Color(0xFF0F1117) : const Color(0xFFF7F8FD);
-
     return Scaffold(
-      backgroundColor: bg,
+      backgroundColor: DesignColor.bg,
       body: heatAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const Center(child: CircularProgressIndicator(color: DesignColor.indigo)),
         error: (_, __) => _RetryView(onRetry: () => ref.invalidate(heatmapProvider)),
-        data: (fullHeatmap) => _buildBody(context, cs, isDark, bg, fullHeatmap),
+        data: (fullHeatmap) => _buildBody(context, cs, isDark, DesignColor.bg, fullHeatmap),
       ),
     );
   }
@@ -231,10 +230,10 @@ class _HeatmapScreenState extends ConsumerState<HeatmapScreen>
         slivers: [
           // ── SliverAppBar ─────────────────────────────────────────────────
           SliverAppBar(
-            pinned: true, expandedHeight: 160, snap: false, floating: false,
+            pinned: true, expandedHeight: 160,
             backgroundColor: mStyle.primary,
             flexibleSpace: FlexibleSpaceBar(
-              background: _AppBarBackground(style: mStyle, heatmap: heatmap, shimmer: _shimmer),
+              background: _AppBarBackground(style: mStyle, heatmap: heatmap),
             ),
             actions: [
               if (_syncing)
@@ -314,8 +313,7 @@ class _HeatmapScreenState extends ConsumerState<HeatmapScreen>
 class _AppBarBackground extends StatelessWidget {
   final _StressStyle style;
   final Map<String, dynamic> heatmap;
-  final AnimationController shimmer;
-  const _AppBarBackground({required this.style, required this.heatmap, required this.shimmer});
+  const _AppBarBackground({required this.style, required this.heatmap});
 
   @override
   Widget build(BuildContext context) {
@@ -324,7 +322,7 @@ class _AppBarBackground extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [style.primary, style.primary.withOpacity(0.75)],
+          colors: [style.primary, Color.lerp(style.primary, Colors.black, 0.3)!],
           begin: Alignment.topLeft, end: Alignment.bottomRight,
         ),
       ),
@@ -432,14 +430,7 @@ class _CalendarCard extends StatelessWidget {
 
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1A1D27) : Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(isDark ? 0.3 : 0.06),
-            blurRadius: 16, offset: const Offset(0, 4)),
-        ],
-      ),
+      decoration: DesignStyles.glassCard(),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
         child: TableCalendar(
@@ -468,15 +459,15 @@ class _CalendarCard extends StatelessWidget {
               child: Text('${day.day}', style: TextStyle(color: cs.outline.withOpacity(0.35), fontSize: 13))),
             markerBuilder: (_, __, ___) => const SizedBox.shrink(),
           ),
-          headerStyle: HeaderStyle(
+          headerStyle: const HeaderStyle(
             formatButtonVisible: false,
             titleCentered: true,
-            leftChevronIcon: Icon(Icons.chevron_left_rounded, color: cs.primary),
-            rightChevronIcon: Icon(Icons.chevron_right_rounded, color: cs.primary),
-            titleTextStyle: TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: cs.onSurface),
-            headerPadding: const EdgeInsets.symmetric(vertical: 10),
+            leftChevronIcon: Icon(Icons.chevron_left_rounded, color: DesignColor.sub),
+            rightChevronIcon: Icon(Icons.chevron_right_rounded, color: DesignColor.sub),
+            titleTextStyle: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: DesignColor.text, fontFamily: 'Syne'),
+            headerPadding: EdgeInsets.symmetric(vertical: 10),
             decoration: BoxDecoration(
-              border: Border(bottom: BorderSide(color: cs.outline.withOpacity(0.1))),
+              border: Border(bottom: BorderSide(color: DesignColor.border)),
             ),
           ),
           calendarStyle: const CalendarStyle(outsideDaysVisible: false),
@@ -504,18 +495,18 @@ class _DayCell extends StatelessWidget {
     final evCount = (data?['events'] as List?)?.length ?? 0;
 
     Color bgColor = Colors.transparent;
-    Color textColor = cs.onSurface;
+    Color textColor = DesignColor.text;
     Color? ringColor;
 
     if (isSelected) {
-      bgColor = style?.primary ?? cs.primary;
+      bgColor = style?.primary ?? DesignColor.indigo;
       textColor = Colors.white;
     } else if (isToday) {
-      ringColor = cs.primary;
-      textColor = cs.primary;
-      if (style != null) bgColor = style.soft.withOpacity(0.6);
+      ringColor = DesignColor.indigo;
+      textColor = DesignColor.indigo;
+      if (style != null) bgColor = style.soft;
     } else if (style != null) {
-      bgColor = style.soft.withOpacity(0.55);
+      bgColor = style.soft;
       textColor = style.primary;
     }
 
@@ -563,15 +554,11 @@ class _DayPanel extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final style = level != null ? _kStress[level] : null;
-    final color = style?.primary ?? cs.surfaceContainerHighest;
+    final color = style?.primary ?? DesignColor.muted;
 
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 0, 12, 0),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1A1D27) : Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 16, offset: const Offset(0, 4))],
-      ),
+      decoration: DesignStyles.glassCard(),
       child: Column(children: [
         // Header
         Container(

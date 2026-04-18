@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'core/theme/design_tokens.dart';
 import 'router.dart';
 
 class LuminaApp extends ConsumerWidget {
@@ -11,61 +12,48 @@ class LuminaApp extends ConsumerWidget {
     return MaterialApp.router(
       title: 'Lumina',
       debugShowCheckedModeBanner: false,
-      theme: _buildTheme(Brightness.light),
-      darkTheme: _buildTheme(Brightness.dark),
-      themeMode: ThemeMode.system,
+      themeMode: ThemeMode.dark, // Force Dark mode
+      darkTheme: _buildDarkTheme(),
       routerConfig: router,
     );
   }
 
-  ThemeData _buildTheme(Brightness brightness) {
-    final isDark = brightness == Brightness.dark;
-    final colorScheme = ColorScheme.fromSeed(
-      seedColor: const Color(0xFF6366F1), // Indigo core
-      brightness: brightness,
-    );
-
-    return ThemeData(
-      useMaterial3: true,
-      colorScheme: colorScheme,
-      textTheme: GoogleFonts.nunitoTextTheme(
-        isDark ? ThemeData.dark().textTheme : ThemeData.light().textTheme,
+  ThemeData _buildDarkTheme() {
+    final base = ThemeData.dark(useMaterial3: true);
+    
+    return base.copyWith(
+      scaffoldBackgroundColor: DesignColor.bg,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: DesignColor.indigo,
+        brightness: Brightness.dark,
+        surface: DesignColor.bg,
+        onSurface: DesignColor.text,
       ),
-      cardTheme: CardThemeData(
-        elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        color: isDark ? const Color(0xFF1E1E2E) : Colors.white,
+      textTheme: GoogleFonts.dmSansTextTheme(base.textTheme).copyWith(
+        displayLarge: GoogleFonts.syne(color: DesignColor.text, fontWeight: FontWeight.w800),
+        displayMedium: GoogleFonts.syne(color: DesignColor.text, fontWeight: FontWeight.w800),
+        displaySmall: GoogleFonts.syne(color: DesignColor.text, fontWeight: FontWeight.w800),
+        headlineLarge: GoogleFonts.syne(color: DesignColor.text, fontWeight: FontWeight.w700),
+        headlineMedium: GoogleFonts.syne(color: DesignColor.text, fontWeight: FontWeight.w700),
+        headlineSmall: GoogleFonts.syne(color: DesignColor.text, fontWeight: FontWeight.w700),
+        titleLarge: GoogleFonts.syne(color: DesignColor.text, fontWeight: FontWeight.w700),
       ),
       appBarTheme: AppBarTheme(
+        backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: false,
-        backgroundColor: colorScheme.surface,
-        foregroundColor: colorScheme.onSurface,
-        titleTextStyle: GoogleFonts.nunito(
+        iconTheme: const IconThemeData(color: DesignColor.text),
+        titleTextStyle: GoogleFonts.syne(
           fontSize: 22,
-          fontWeight: FontWeight.w700,
-          color: colorScheme.onSurface,
+          fontWeight: FontWeight.w800,
+          color: DesignColor.text,
         ),
       ),
-      elevatedButtonTheme: ElevatedButtonThemeData(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: colorScheme.primary,
-          foregroundColor: colorScheme.onPrimary,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-        ),
-      ),
-      inputDecorationTheme: InputDecorationTheme(
-        filled: true,
-        fillColor: isDark ? const Color(0xFF2A2A3E) : const Color(0xFFF5F5FF),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
-        ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      ),
-      chipTheme: ChipThemeData(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.android: FadeUpwardsPageTransitionsBuilder(),
+          TargetPlatform.iOS: FadeUpwardsPageTransitionsBuilder(),
+        },
       ),
     );
   }

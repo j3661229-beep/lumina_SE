@@ -14,6 +14,7 @@ class WeeklyWrapScreen extends ConsumerWidget {
     final allAsync  = ref.watch(expenseProvider);
     final cs        = Theme.of(context).colorScheme;
     final isDark    = Theme.of(context).brightness == Brightness.dark;
+    final size      = MediaQuery.sizeOf(context);
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF0F1117) : const Color(0xFFF7F8FD),
@@ -51,8 +52,8 @@ class WeeklyWrapScreen extends ConsumerWidget {
           latestData.forEach((k, v) { if (v > topAmt) { topAmt = v; topCat = k; } });
           final topCatMeta = catFor(topCat);
 
-          // Budget status (₹5000 week budget — common student)
-          const weekBudget = 5000.0;
+          // Budget status
+          final weekBudget = ref.watch(budgetProvider);
           final budgetPct  = (weekTotal / weekBudget).clamp(0.0, 1.0);
           final budgetColor = budgetPct > 0.9 ? const Color(0xFFEF4444)
               : budgetPct > 0.7 ? const Color(0xFFF59E0B)
@@ -66,12 +67,40 @@ class WeeklyWrapScreen extends ConsumerWidget {
               // ── Header ────────────────────────────────────────────────
               SliverAppBar(
                 pinned: true,
-                expandedHeight: 180,
+                expandedHeight: size.height > 800 ? 220 : 180,
                 backgroundColor: cs.primary,
                 leading: IconButton(
                   icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white),
                   onPressed: () => Navigator.pop(context),
                 ),
+                actions: [
+                  IconButton(
+                    icon: const Icon(Icons.edit_note_rounded, color: Colors.white),
+                    tooltip: 'Set Budget',
+                    onPressed: () {
+                      final ctrl = TextEditingController(text: weekBudget.toStringAsFixed(0));
+                      showDialog(context: context, builder: (ctx) => AlertDialog(
+                        title: const Text('Set Weekly Budget'),
+                        content: TextField(
+                          controller: ctrl,
+                          autofocus: true,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(prefixText: '₹ ', border: OutlineInputBorder()),
+                        ),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+                          FilledButton(onPressed: () {
+                            final b = double.tryParse(ctrl.text);
+                            if (b != null && b > 0) {
+                              ref.read(budgetProvider.notifier).setBudget(b);
+                            }
+                            Navigator.pop(ctx);
+                          }, child: const Text('Save')),
+                        ]
+                      ));
+                    },
+                  ),
+                ],
                 flexibleSpace: FlexibleSpaceBar(
                   background: Container(
                     decoration: BoxDecoration(
@@ -168,7 +197,7 @@ class WeeklyWrapScreen extends ConsumerWidget {
                         Expanded(
                           flex: 5,
                           child: SizedBox(
-                            height: 180,
+                            height: size.height > 800 ? 300 : 250,
                             child: PieChart(PieChartData(
                               sections: latestData.entries.map((e) {
                                 final cat = catFor(e.key);
