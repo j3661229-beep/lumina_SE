@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme/design_tokens.dart';
+import '../../shared/widgets/shimmer_widgets.dart';
 import 'timetable_provider.dart';
 
 class TimetableScreen extends ConsumerStatefulWidget {
@@ -116,7 +117,7 @@ class _TimetableScreenState extends ConsumerState<TimetableScreen> {
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: slotsAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator(color: DesignColor.indigo)),
+        loading: () => const TimetableShimmer(),
       error: (e, _) => Center(
         child: Padding(
           padding: const EdgeInsets.all(32),

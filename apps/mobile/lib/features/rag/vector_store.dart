@@ -52,9 +52,9 @@ class VectorStore {
 
     if (geminiEmb != null) return geminiEmb;
 
-    // Offline fallback: deterministic 768-dim hash embedding
-    final rng = Random(text.hashCode ^ text.length);
-    return List.generate(768, (_) => rng.nextDouble() * 2 - 1);
+      // Offline fallback: store zero-vectors (so Isar schema is satisfied)
+      // We will use keyword searching via text overlap when offline anyway!
+      return List.filled(768, 0.0);
   }
 
   // ── Store all chunks from a document ─────────────────────────────────────
@@ -93,18 +93,37 @@ class VectorStore {
     await _isar.writeTxn(() => _isar.documentChunks.putAll(items));
   }
 
-  // ── Semantic search — cosine similarity over all stored embeddings ─────────
+  // ── Semantic search — cosine similarity if online, keyword matching if offline
   Future<List<DocumentChunk>> search(String query, {int topK = 5}) async {
     await init();
-    final queryEmb = await embed(query, isQuery: true);
+    final geminiEmb = await GeminiRagService.instance.embedQuery(query);
     final all = await _isar.documentChunks.where().findAll();
 
-    final scored = all
-        .map((c) => (chunk: c, score: _cosine(queryEmb, c.embedding)))
-        .toList()
-      ..sort((a, b) => b.score.compareTo(a.score));
+    if (geminiEmb != null) {
+      // Online semantic search
+      final scored = all
+          .map((c) => (chunk: c, score: _cosine(geminiEmb, c.embedding)))
+          .toList()
+        ..sort((a, b) => b.score.compareTo(a.score));
+      return scored.take(topK).map((s) => s.chunk).toList();
+    } else {
+      // Offline fallback: Keyword overlap (TF-IDF/Jaccard approximation)
+      final qTerms = query.toLowerCase().split(RegExp(r'\W+')).where((t) => t.length > 2).toSet();
+      if (qTerms.isEmpty) return all.take(topK).toList();
 
-    return scored.take(topK).map((s) => s.chunk).toList();
+      final scored = all.map((c) {
+        final cTerms = c.chunkText.toLowerCase().split(RegExp(r'\W+')).where((t) => t.length > 2).toSet();
+        final intersect = qTerms.intersection(cTerms).length;
+        // Simple overlap score favoring dense matches in shorter chunks
+        final score = intersect / sqrt(cTerms.length.clamp(1, 1000)); 
+        return (chunk: c, score: score);
+      }).toList()
+        ..sort((a, b) => b.score.compareTo(a.score));
+
+      // Filter to chunks that actually matched at least one keyword, unless absolutely none did
+      final filtered = scored.where((s) => s.score > 0).toList();
+      return (filtered.isNotEmpty ? filtered : scored).take(topK).map((s) => s.chunk).toList();
+    }
   }
 
   // ── All indexed documents (deduplicated by docId) ─────────────────────────

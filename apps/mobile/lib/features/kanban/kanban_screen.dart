@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:go_router/go_router.dart';
+import '../../shared/widgets/shimmer_widgets.dart';
+import '../../shared/widgets/app_card.dart';
 
 enum KanbanCol { backlog, todo, doing, done }
 
@@ -338,7 +340,7 @@ class _KanbanScreenState extends ConsumerState<KanbanScreen> {
         label: const Text('Add Task'),
       ),
       body: _loading
-        ? const Center(child: CircularProgressIndicator())
+        ? const KanbanShimmer()
         : ListView(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.all(16),
@@ -498,7 +500,7 @@ class _MyTasksKanbanScreenState extends ConsumerState<MyTasksKanbanScreen> {
         ),
       ),
       body: _loading
-        ? const Center(child: CircularProgressIndicator())
+        ? const KanbanShimmer()
         : total == 0
           ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
               Icon(Icons.checklist_rtl_outlined, size: 56, color: cs.primary.withOpacity(0.3)),
@@ -1078,23 +1080,11 @@ class _TaskCard extends StatelessWidget {
     return InkWell(
       onTap: dragging ? null : onTap,
       borderRadius: BorderRadius.circular(14),
-      child: Container(
+      child: AppCard(
         margin: const EdgeInsets.only(bottom: 8),
-        decoration: BoxDecoration(
-          color: dragging ? cs.primary.withOpacity(0.95) : cs.surface,
-          borderRadius: BorderRadius.circular(14),
-          border: Border(left: BorderSide(color: color, width: 4)),
-          boxShadow: [
-            BoxShadow(
-              color: dragging ? cs.primary.withOpacity(0.3) : Colors.black.withOpacity(0.06),
-              blurRadius: dragging ? 20 : 4,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        color: dragging ? cs.primary.withOpacity(0.95) : cs.surface,
+        padding: const EdgeInsets.all(12),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
               Expanded(child: Text(
                 task['title'] as String? ?? '',

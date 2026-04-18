@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../core/theme/design_tokens.dart';
+import '../../shared/widgets/shimmer_widgets.dart';
 import 'context_switch_provider.dart';
 
 class FlowGraphScreen extends ConsumerWidget {
@@ -35,7 +36,7 @@ class FlowGraphScreen extends ConsumerWidget {
         ],
       ),
       body: stateAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator(color: DesignColor.indigo)),
+        loading: () => const FlowShimmer(),
         error: (e, _) => Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
           const Icon(Icons.error_outline, size: 48, color: DesignColor.rose),
           const SizedBox(height: 8),

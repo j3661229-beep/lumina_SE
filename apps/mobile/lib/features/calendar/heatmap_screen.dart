@@ -6,6 +6,8 @@ import 'package:intl/intl.dart';
 import 'dart:async';
 import '../../core/network/api_client.dart';
 import '../../core/theme/design_tokens.dart';
+import '../../shared/widgets/shimmer_widgets.dart';
+import '../../shared/widgets/app_card.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Provider
@@ -49,6 +51,7 @@ class _HeatmapScreenState extends ConsumerState<HeatmapScreen>
   DateTime _focused = DateTime.now();
   DateTime? _selected;
   bool _syncing = false;
+  bool _refreshing = false; // subtle overlay — keeps calendar visible
   String? _banner;
   bool _bannerOk = true;
   late AnimationController _shimmer;
@@ -169,13 +172,23 @@ class _HeatmapScreenState extends ConsumerState<HeatmapScreen>
 
   // ── Add manual event ────────────────────────────────────────────────────────
   Future<void> _addEvent() async {
-    final result = await showModalBottomSheet<bool>(
+    final result = await showModalBottomSheet<Map<String, dynamic>?>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _AddEventSheet(initialDate: _selected ?? DateTime.now()),
+      builder: (_) => _AddEventSheet(initialDate: _selected ?? _focused),
     );
-    if (result == true) {
+    if (result != null) {
+      // Navigate to the saved event's month so user sees it immediately
+      final savedDate = result['date'] as DateTime?;
+      if (savedDate != null && mounted) {
+        setState(() {
+          _focused = DateTime(savedDate.year, savedDate.month);
+          _selected = savedDate;
+        });
+      }
+      // Refresh data with subtle overlay (keeps calendar visible)
+      setState(() => _refreshing = true);
       ref.invalidate(heatmapProvider);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -190,13 +203,33 @@ class _HeatmapScreenState extends ConsumerState<HeatmapScreen>
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final heatAsync = ref.watch(heatmapProvider);
 
-    // Background
+    // When data is refreshing after an event is saved, dismiss the overlay
+    heatAsync.whenData((_) {
+      if (_refreshing) {
+        // Use addPostFrameCallback to avoid setState during build
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _refreshing) setState(() => _refreshing = false);
+        });
+      }
+    });
+
     return Scaffold(
       backgroundColor: DesignColor.bg,
       body: heatAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator(color: DesignColor.indigo)),
+        // On FIRST load (no cached data) → show full-screen shimmer skeleton
+        loading: () => const CardListShimmer(count: 8, cardHeight: 56),
         error: (_, __) => _RetryView(onRetry: () => ref.invalidate(heatmapProvider)),
-        data: (fullHeatmap) => _buildBody(context, cs, isDark, DesignColor.bg, fullHeatmap),
+        // On subsequent loads (after invalidate) → keep showing calendar with overlay
+        data: (fullHeatmap) => Stack(
+          children: [
+            _buildBody(context, cs, isDark, DesignColor.bg, fullHeatmap),
+            if (_refreshing)
+              const Positioned(
+                top: 0, left: 0, right: 0,
+                child: LinearProgressIndicator(color: DesignColor.indigo, backgroundColor: Colors.transparent),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -211,7 +244,7 @@ class _HeatmapScreenState extends ConsumerState<HeatmapScreen>
     final selEvents = selData?['events'] as List<dynamic>? ?? [];
     final selLevel = selData?['level'] as String?;
 
-    // Month summary
+    // Month summary — based on FOCUSED month, not current month
     final counts = {'low':0,'medium':0,'high':0,'critical':0};
     for (final v in heatmap.values) {
       final l = (v as Map<String,dynamic>)['level'] as String?;
@@ -224,7 +257,10 @@ class _HeatmapScreenState extends ConsumerState<HeatmapScreen>
     final mStyle = _kStress[monthLevel]!;
 
     return RefreshIndicator(
-      onRefresh: () async => ref.invalidate(heatmapProvider),
+      onRefresh: () async {
+        setState(() => _refreshing = true);
+        ref.invalidate(heatmapProvider);
+      },
       edgeOffset: 100,
       child: CustomScrollView(
         slivers: [
@@ -233,7 +269,12 @@ class _HeatmapScreenState extends ConsumerState<HeatmapScreen>
             pinned: true, expandedHeight: 160,
             backgroundColor: mStyle.primary,
             flexibleSpace: FlexibleSpaceBar(
-              background: _AppBarBackground(style: mStyle, heatmap: heatmap),
+              // Pass focused month so header shows correct month on navigation
+              background: _AppBarBackground(
+                style: mStyle,
+                heatmap: heatmap,
+                focusedMonth: _focused,
+              ),
             ),
             actions: [
               if (_syncing)
@@ -274,19 +315,21 @@ class _HeatmapScreenState extends ConsumerState<HeatmapScreen>
                 ]),
               ),
 
-            // ── Month stress bar ───────────────────────────────────────────
-            _MonthStressBar(counts: counts, total: totalBusy),
+            // ── Month stress bar (for focused month) ───────────────────────
+            _MonthStressBar(counts: counts, total: totalBusy, focusedMonth: _focused),
 
             // ── Calendar Card ──────────────────────────────────────────────
+            // NOTE: heatmap passed here is the FULL 12-month map so TableCalendar
+            // can colour days as the user swipes between months without re-fetching.
             _CalendarCard(
               focusedDay: _focused,
               selectedDay: _selected,
-              heatmap: heatmap,
+              heatmap: fullHeatmap,   // <-- full map so adjacent months colour correctly
               onDaySelected: (sel, foc) => setState(() { _selected = sel; _focused = foc; }),
               onPageChanged: (d) {
-              // Only update local state — full data is already loaded
-              setState(() { _focused = d; _selected = null; });
-            },
+                // Only update local state — full data is already loaded, no network call
+                setState(() { _focused = d; _selected = null; });
+              },
             ),
 
             const SizedBox(height: 12),
@@ -297,7 +340,7 @@ class _HeatmapScreenState extends ConsumerState<HeatmapScreen>
             else if (fullHeatmap.isEmpty)
               _EmptyState(onSync: _syncGmail, onManual: _addEvent)
             else
-              _MonthInsights(counts: counts),
+              _MonthInsights(counts: counts, focusedMonth: _focused),
 
             const SizedBox(height: 80),
           ])),
@@ -313,12 +356,19 @@ class _HeatmapScreenState extends ConsumerState<HeatmapScreen>
 class _AppBarBackground extends StatelessWidget {
   final _StressStyle style;
   final Map<String, dynamic> heatmap;
-  const _AppBarBackground({required this.style, required this.heatmap});
+  final DateTime focusedMonth; // correctly shows navigated month
+  const _AppBarBackground({
+    required this.style,
+    required this.heatmap,
+    required this.focusedMonth,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final monthName = DateFormat('MMMM yyyy').format(now);
+    // Use focused month (not DateTime.now()) so header updates on navigation
+    final monthName = DateFormat('MMMM yyyy').format(focusedMonth);
+    // Mini dots show the 7 days centred on the focused month's 'today'
+    final refDay = DateTime.now();
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -335,12 +385,12 @@ class _AppBarBackground extends StatelessWidget {
           Text(style.label, style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w500)),
           Text(monthName, style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800)),
         ])),
-        // Mini heatmap dots (last 7 days)
+        // Mini heatmap dots (last 7 days relative to today)
         Column(mainAxisAlignment: MainAxisAlignment.end, children: [
           const Text('This week', style: TextStyle(color: Colors.white54, fontSize: 10)),
           const SizedBox(height: 4),
           Row(children: List.generate(7, (i) {
-            final d = now.subtract(Duration(days: 6 - i));
+            final d = refDay.subtract(Duration(days: 6 - i));
             final key = _fmtKey(d);
             final data = heatmap[key] as Map<String,dynamic>?;
             final color = data != null ? (_kStress[data['level']]?.primary ?? Colors.white24)
@@ -363,13 +413,15 @@ class _AppBarBackground extends StatelessWidget {
 class _MonthStressBar extends StatelessWidget {
   final Map<String, int> counts;
   final int total;
-  const _MonthStressBar({required this.counts, required this.total});
+  final DateTime focusedMonth;
+  const _MonthStressBar({required this.counts, required this.total, required this.focusedMonth});
 
   @override
   Widget build(BuildContext context) {
     if (total == 0) return const SizedBox.shrink();
     final cs = Theme.of(context).colorScheme;
-    final daysInMonth = 30;
+    // Use actual days-in-month for the focused month
+    final daysInMonth = DateUtils.getDaysInMonth(focusedMonth.year, focusedMonth.month);
 
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -428,9 +480,10 @@ class _CalendarCard extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Container(
+    return AppCard(
       margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-      decoration: DesignStyles.glassCard(),
+      glass: true,
+      padding: EdgeInsets.zero,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
         child: TableCalendar(
@@ -459,15 +512,15 @@ class _CalendarCard extends StatelessWidget {
               child: Text('${day.day}', style: TextStyle(color: cs.outline.withOpacity(0.35), fontSize: 13))),
             markerBuilder: (_, __, ___) => const SizedBox.shrink(),
           ),
-          headerStyle: const HeaderStyle(
+          headerStyle: HeaderStyle(
             formatButtonVisible: false,
             titleCentered: true,
-            leftChevronIcon: Icon(Icons.chevron_left_rounded, color: DesignColor.sub),
-            rightChevronIcon: Icon(Icons.chevron_right_rounded, color: DesignColor.sub),
-            titleTextStyle: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: DesignColor.text, fontFamily: 'Syne'),
-            headerPadding: EdgeInsets.symmetric(vertical: 10),
+            leftChevronIcon: Icon(Icons.chevron_left_rounded, color: cs.onSurface),
+            rightChevronIcon: Icon(Icons.chevron_right_rounded, color: cs.onSurface),
+            titleTextStyle: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: cs.onSurface),
+            headerPadding: const EdgeInsets.symmetric(vertical: 10),
             decoration: BoxDecoration(
-              border: Border(bottom: BorderSide(color: DesignColor.border)),
+              border: Border(bottom: BorderSide(color: cs.onSurface.withOpacity(0.05))),
             ),
           ),
           calendarStyle: const CalendarStyle(outsideDaysVisible: false),
@@ -692,12 +745,14 @@ class _EventCard extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 class _MonthInsights extends StatelessWidget {
   final Map<String, int> counts;
-  const _MonthInsights({required this.counts});
+  final DateTime focusedMonth;
+  const _MonthInsights({required this.counts, required this.focusedMonth});
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final monthLabel = DateFormat('MMMM').format(focusedMonth);
 
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 0, 12, 0),
@@ -708,7 +763,7 @@ class _MonthInsights extends StatelessWidget {
         boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 12)],
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('Tap a day to see events', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: cs.onSurface)),
+        Text('$monthLabel — tap a day to see events', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: cs.onSurface)),
         const SizedBox(height: 4),
         Text('Colored cells indicate stress from your calendar', style: TextStyle(color: cs.outline, fontSize: 12)),
         const SizedBox(height: 16),
@@ -833,7 +888,14 @@ class _AddEventSheetState extends State<_AddEventSheet> {
   bool _saving = false;
 
   @override
-  void initState() { super.initState(); _date = widget.initialDate; }
+  void initState() {
+    super.initState();
+    // Default to the focused month's first day if focused month is in the future,
+    // otherwise default to today.
+    final now = DateTime.now();
+    final initial = widget.initialDate;
+    _date = initial.isAfter(now) ? initial : now;
+  }
 
   @override
   void dispose() { _titleCtrl.dispose(); _noteCtrl.dispose(); super.dispose(); }
@@ -952,11 +1014,13 @@ class _AddEventSheetState extends State<_AddEventSheet> {
             try {
               await ApiClient.instance.post('/gmail/manual', data: {
                 'title': _titleCtrl.text.trim(),
-                'event_date': _date.toIso8601String().split('T')[0],
+                // Use local date string to avoid timezone shifts
+                'event_date': '${_date.year}-${_date.month.toString().padLeft(2,'0')}-${_date.day.toString().padLeft(2,'0')}',
                 'stress_level': _stress,
                 if (_noteCtrl.text.isNotEmpty) 'description': _noteCtrl.text.trim(),
               });
-              if (context.mounted) Navigator.pop(context, true);
+              // Return the saved date so the parent can navigate to it
+              if (context.mounted) Navigator.pop(context, <String, dynamic>{'date': _date});
             } catch (e) {
               setState(() => _saving = false);
               if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(

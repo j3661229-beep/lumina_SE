@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/network/api_client.dart';
-import '../../core/theme/design_tokens.dart';
+import '../../core/theme/app_theme.dart';
+import '../../shared/widgets/shimmer_widgets.dart';
+import '../../shared/widgets/app_button.dart';
+import '../../shared/widgets/app_card.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -65,13 +68,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Profile updated successfully!'), backgroundColor: DesignColor.green),
+          const SnackBar(content: Text('Profile updated successfully!'), backgroundColor: Colors.green),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to update: $e'), backgroundColor: DesignColor.rose),
+          SnackBar(content: Text('Failed to update: $e'), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -86,28 +89,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    
     return Scaffold(
-      backgroundColor: const Color(0xFF0F0F1A),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1A1A2E),
         title: const Text('My Profile', style: TextStyle(fontWeight: FontWeight.w700)),
         actions: [
           IconButton(
-            icon: const Icon(Icons.logout, color: DesignColor.rose),
+            icon: Icon(Icons.logout, color: cs.error),
             onPressed: () => showDialog(
               context: context,
               builder: (ctx) => AlertDialog(
-                backgroundColor: const Color(0xFF1A1A2E),
-                title: const Text('Sign Out', style: TextStyle(color: Colors.white)),
-                content: const Text('Are you sure you want to sign out?', style: TextStyle(color: DesignColor.sub)),
+                backgroundColor: cs.surface,
+                title: Text('Sign Out', style: TextStyle(color: cs.onSurface)),
+                content: Text('Are you sure you want to sign out?', style: TextStyle(color: cs.onSurface.withOpacity(0.7))),
                 actions: [
-                  TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx), 
+                    child: Text('Cancel', style: TextStyle(color: cs.onSurface))
+                  ),
                   TextButton(
                     onPressed: () {
                       Navigator.pop(ctx);
                       _signOut();
                     },
-                    child: const Text('Sign Out', style: TextStyle(color: DesignColor.rose)),
+                    child: Text('Sign Out', style: TextStyle(color: cs.error)),
                   ),
                 ],
               ),
@@ -116,7 +123,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator(color: DesignColor.indigo))
+          ? const ProfileShimmer()
           : SingleChildScrollView(
               padding: const EdgeInsets.all(24),
               child: Form(
@@ -124,51 +131,49 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Center(
+                    Center(
                       child: CircleAvatar(
-                        radius: 40,
-                        backgroundColor: DesignColor.indigo,
-                        child: Icon(Icons.person, size: 40, color: Colors.white),
+                        radius: 44,
+                        backgroundColor: cs.primary.withOpacity(0.15),
+                        child: Icon(Icons.person, size: 44, color: cs.primary),
                       ),
                     ),
                     const SizedBox(height: 32),
-                    _buildField('Display Name', _displayNameCtrl, icon: Icons.badge_outlined),
-                    const SizedBox(height: 16),
-                    _buildField('College / University', _collegeCtrl, icon: Icons.account_balance_outlined),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(child: _buildField('Branch', _branchCtrl, icon: Icons.library_books_outlined)),
-                        const SizedBox(width: 16),
-                        Expanded(child: _buildField('Year', _yearCtrl, icon: Icons.calendar_today_outlined, isNumber: true)),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    _buildField('Roll Number', _rollNumberCtrl, icon: Icons.pin_outlined),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(child: _buildField('Division', _divisionCtrl, icon: Icons.class_outlined)),
-                        const SizedBox(width: 16),
-                        Expanded(child: _buildField('Batch', _batchCtrl, icon: Icons.group_outlined)),
-                      ],
+                    AppCard(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        children: [
+                          _buildField('Display Name', _displayNameCtrl, icon: Icons.badge_outlined, cs: cs),
+                          const SizedBox(height: 16),
+                          _buildField('College / University', _collegeCtrl, icon: Icons.account_balance_outlined, cs: cs),
+                          const SizedBox(height: 16),
+                          Row(
+                            children: [
+                              Expanded(child: _buildField('Branch', _branchCtrl, icon: Icons.library_books_outlined, cs: cs)),
+                              const SizedBox(width: 16),
+                              Expanded(child: _buildField('Year', _yearCtrl, icon: Icons.calendar_today_outlined, isNumber: true, cs: cs)),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          _buildField('Roll Number', _rollNumberCtrl, icon: Icons.pin_outlined, cs: cs),
+                          const SizedBox(height: 16),
+                          Row(
+                            children: [
+                              Expanded(child: _buildField('Division', _divisionCtrl, icon: Icons.class_outlined, cs: cs)),
+                              const SizedBox(width: 16),
+                              Expanded(child: _buildField('Batch', _batchCtrl, icon: Icons.group_outlined, cs: cs)),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 32),
                     SizedBox(
                       width: double.infinity,
-                      child: Container(
-                        decoration: DesignStyles.gradientButton(),
-                        child: FilledButton(
-                          onPressed: _saving ? null : _saveProfile,
-                          style: FilledButton.styleFrom(
-                            backgroundColor: Colors.transparent,
-                            elevation: 0,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                          ),
-                          child: _saving 
-                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                            : const Text('Save Changes', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
-                        ),
+                      child: AppButton(
+                        text: 'Save Changes',
+                        onPressed: _saveProfile,
+                        isLoading: _saving,
                       ),
                     ),
                   ],
@@ -178,17 +183,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildField(String label, TextEditingController controller, {required IconData icon, bool isNumber = false}) {
+  Widget _buildField(String label, TextEditingController controller, {required IconData icon, bool isNumber = false, required ColorScheme cs}) {
     return TextFormField(
       controller: controller,
-      style: const TextStyle(color: Colors.white),
+      style: TextStyle(color: cs.onSurface),
       keyboardType: isNumber ? TextInputType.number : TextInputType.text,
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(color: DesignColor.sub),
-        prefixIcon: Icon(icon, color: DesignColor.sub),
+        labelStyle: TextStyle(color: cs.onSurface.withOpacity(0.6)),
+        prefixIcon: Icon(icon, color: cs.onSurface.withOpacity(0.6)),
         filled: true,
-        fillColor: const Color(0xFF1E1E2E), // slightly lighter than bg
+        fillColor: cs.surfaceContainerHighest.withOpacity(0.5),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
       ),
     );

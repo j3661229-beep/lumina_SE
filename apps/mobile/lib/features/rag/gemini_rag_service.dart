@@ -23,8 +23,11 @@ class GeminiRagService {
 
   // ── Check connectivity ────────────────────────────────────────────────────
   Future<bool> isOnline() async {
-    final result = await Connectivity().checkConnectivity();
-    return result.isNotEmpty && result.first != ConnectivityResult.none;
+    // Forcing completely offline operations for now, as requested.
+    // To restore API usage, uncomment below:
+    // final result = await Connectivity().checkConnectivity();
+    // return result.isNotEmpty && result.first != ConnectivityResult.none;
+    return false;
   }
 
   // ── Generate 768-dim embedding for a text chunk ───────────────────────────
@@ -74,7 +77,8 @@ class GeminiRagService {
   // ── Synthesise an answer from retrieved context chunks ────────────────────
   Future<String> synthesise(String query, List<String> chunks) async {
     if (!await isOnline()) {
-      return '⚠️ Offline mode — showing raw retrieved passages. Connect to internet for AI-synthesised answers.';
+      final context = chunks.asMap().entries.map((e) => '> ${e.value.replaceAll('\n', '\n> ')}').join('\n\n');
+      return '*(Offline Mode)* Here are the most relevant excerpts from your documents:\n\n$context';
     }
     final context = chunks.asMap().entries.map((e) => '[${e.key + 1}] ${e.value}').join('\n\n');
     try {
@@ -100,11 +104,10 @@ ANSWER:'''
       );
       return res.data['candidates'][0]['content']['parts'][0]['text'] as String;
     } catch (e) {
-      String errorMessage = e.toString();
-      if (e is DioException && e.response != null) {
-        errorMessage += '\nResponse DATA: ${e.response?.data}';
-      }
-      return '⚠️ Could not generate answer: $errorMessage\n\nHere are the relevant passages:\n\n${chunks.join('\n\n---\n\n')}';
+      // If the API crashes (e.g. 404, rate limit), fallback gracefully to local chunks
+      // instead of showing ugly DioExceptions to the user.
+      final fallbackContext = chunks.asMap().entries.map((e) => '> ${e.value.replaceAll('\n', '\n> ')}').join('\n\n');
+      return '*(Offline / Fallback)* We could not reach Lumina AI at the moment. Here are the most relevant excerpts from your notes:\n\n$fallbackContext';
     }
   }
 }

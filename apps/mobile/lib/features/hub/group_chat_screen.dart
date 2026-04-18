@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../core/network/api_client.dart';
 import '../../core/theme/design_tokens.dart';
+import '../../shared/widgets/shimmer_widgets.dart';
 
 class GroupChatScreen extends ConsumerStatefulWidget {
   final String groupId;
@@ -344,7 +345,7 @@ class _GroupChatScreenState extends ConsumerState<GroupChatScreen> {
       body: Column(children: [
         // Messages list
         Expanded(child: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const ChatShimmer()
           : _messages.isEmpty
             ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
                 Text('👋', style: const TextStyle(fontSize: 48)),
@@ -426,16 +427,16 @@ class _MessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
     final isCode = msg['message_type'] == 'code';
     final content = msg['content'] as String? ?? '';
     final lang = (msg['metadata'] as Map?)?['language'] as String? ?? '';
 
     final bubbleColor = isMe
-        ? const Color(0xFF6366F1)
-        : isDark ? const Color(0xFF1E1E2E) : Colors.white;
-    final textColor = isMe ? Colors.white : null;
+        ? cs.primary
+        : cs.surfaceContainerHighest;
+    final textColor = isMe ? cs.onPrimary : cs.onSurface;
 
     final timeStr = () {
       try {
@@ -499,9 +500,9 @@ class _MessageBubble extends StatelessWidget {
                       if (isCode)
                         Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           Row(children: [
-                            Icon(Icons.code, size: 12, color: isMe ? Colors.white70 : cs.outline),
+                            Icon(Icons.code, size: 12, color: isMe ? cs.onPrimary.withOpacity(0.7) : cs.outline),
                             const SizedBox(width: 4),
-                            Text(lang, style: TextStyle(fontSize: 11, color: isMe ? Colors.white70 : cs.outline)),
+                            Text(lang, style: TextStyle(fontSize: 11, color: isMe ? cs.onPrimary.withOpacity(0.7) : cs.outline)),
                           ]),
                           const SizedBox(height: 6),
                           Container(
@@ -525,7 +526,7 @@ class _MessageBubble extends StatelessWidget {
                         timeStr,
                         style: TextStyle(
                           fontSize: 10,
-                          color: isMe ? Colors.white54 : cs.outline,
+                          color: isMe ? cs.onPrimary.withOpacity(0.6) : cs.outline,
                         ),
                       ),
                     ]),

@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../core/theme/design_tokens.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
+import '../../core/theme/app_theme.dart';
+import '../../shared/widgets/app_card.dart';
+import '../../shared/widgets/app_button.dart';
 import 'rag_provider.dart';
 
 class RagScreen extends ConsumerStatefulWidget {
@@ -65,14 +68,17 @@ class _RagScreenState extends ConsumerState<RagScreen>
   Widget build(BuildContext context) {
     final ragAsync = ref.watch(ragProvider);
 
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
     return Scaffold(
-      backgroundColor: DesignColor.bg,
+      backgroundColor: cs.surface,
       body: Stack(children: [
         // Ambient glows
         Positioned(top: -100, right: -80,
-          child: _GlowOrb(color: const Color(0xFF8B5CF6), size: 300, opacity: 0.15)),
+          child: _GlowOrb(color: cs.primary, size: 300, opacity: 0.15)),
         Positioned(bottom: 100, left: -60,
-          child: _GlowOrb(color: DesignColor.cyan, size: 220, opacity: 0.1)),
+          child: _GlowOrb(color: cs.tertiary, size: 220, opacity: 0.1)),
 
         SafeArea(child: Column(children: [
           // ── Header ──────────────────────────────────────────────────────
@@ -80,13 +86,12 @@ class _RagScreenState extends ConsumerState<RagScreen>
             padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
             child: Row(children: [
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('Second Brain', style: TextStyle(
-                  fontFamily: 'Syne', fontSize: 20, fontWeight: FontWeight.w800, color: DesignColor.text)),
+                Text('Second Brain', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
                 ragAsync.when(
-                  loading: () => const Text('Initialising…', style: TextStyle(color: DesignColor.sub, fontSize: 11)),
+                  loading: () => Text('Initialising…', style: TextStyle(color: cs.onSurface.withOpacity(0.6), fontSize: 11)),
                   error: (_, __) => const SizedBox(),
                   data: (s) => Text('${s.docs.length} docs · ${s.totalChunks} chunks indexed',
-                    style: const TextStyle(color: DesignColor.sub, fontSize: 11)),
+                    style: TextStyle(color: cs.onSurface.withOpacity(0.6), fontSize: 11)),
                 ),
               ])),
               // Docs toggle
@@ -95,12 +100,12 @@ class _RagScreenState extends ConsumerState<RagScreen>
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                   decoration: BoxDecoration(
-                    color: _showDocs ? DesignColor.indigoGlow : DesignColor.s1,
+                    color: _showDocs ? cs.primary.withOpacity(0.1) : cs.surfaceContainerHighest.withOpacity(0.5),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: _showDocs ? DesignColor.borderH : DesignColor.border),
+                    border: Border.all(color: _showDocs ? cs.primary.withOpacity(0.3) : cs.onSurface.withOpacity(0.1)),
                   ),
                   child: Icon(Icons.auto_stories_outlined,
-                    size: 18, color: _showDocs ? DesignColor.indigo : DesignColor.sub),
+                    size: 18, color: _showDocs ? cs.primary : cs.onSurface.withOpacity(0.6)),
                 ),
               ),
             ]),
@@ -111,33 +116,26 @@ class _RagScreenState extends ConsumerState<RagScreen>
           // ── Online indicator + RAG description ──────────────────────────
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 18),
-            child: Container(
+            child: AppCard(
+              glass: true,
               padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0x1A8B5CF6), Color(0x1406B6D4)],
-                  begin: Alignment.topLeft, end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: DesignColor.borderH),
-              ),
+              color: cs.primaryContainer.withOpacity(0.2),
               child: Row(children: [
                 ScaleTransition(
                   scale: _pulse,
                   child: Container(
                     width: 8, height: 8,
                     decoration: const BoxDecoration(
-                      color: DesignColor.green,
+                      color: Colors.green,
                       shape: BoxShape.circle,
-                      boxShadow: [BoxShadow(color: DesignColor.green, blurRadius: 6)],
+                      boxShadow: [BoxShadow(color: Colors.green, blurRadius: 6)],
                     ),
                   ),
                 ),
                 const SizedBox(width: 10),
-                const Expanded(child: Text(
-                  'Local-first RAG — Index once, query forever offline. '
-                  'Embeddings stay on your device.',
-                  style: TextStyle(color: DesignColor.sub, fontSize: 12, height: 1.4),
+                Expanded(child: Text(
+                  'Local-first RAG — Index once, query forever offline. Embeddings stay on your device.',
+                  style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurface.withOpacity(0.7), height: 1.4),
                 )),
               ]),
             ),
@@ -147,23 +145,23 @@ class _RagScreenState extends ConsumerState<RagScreen>
 
           // ── Indexing progress bar ────────────────────────────────────────
           ragAsync.when(
-            loading: () => const LinearProgressIndicator(color: DesignColor.indigo, backgroundColor: DesignColor.s1),
+            loading: () => LinearProgressIndicator(color: cs.primary, backgroundColor: cs.surfaceContainerHighest),
             error: (e, _) => Padding(
               padding: const EdgeInsets.symmetric(horizontal: 18),
-              child: Text('Error: $e', style: const TextStyle(color: DesignColor.rose, fontSize: 12)),
+              child: Text('Error: $e', style: TextStyle(color: cs.error, fontSize: 12)),
             ),
             data: (s) => s.isIndexing
                 ? Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 18),
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(s.indexingStatus ?? '', style: const TextStyle(color: DesignColor.sub, fontSize: 11)),
+                      Text(s.indexingStatus ?? '', style: TextStyle(color: cs.onSurface.withOpacity(0.6), fontSize: 11)),
                       const SizedBox(height: 6),
                       ClipRRect(
                         borderRadius: BorderRadius.circular(4),
                         child: LinearProgressIndicator(
                           value: s.indexProgress,
-                          color: DesignColor.indigo,
-                          backgroundColor: DesignColor.s1,
+                          color: cs.primary,
+                          backgroundColor: cs.surfaceContainerHighest,
                           minHeight: 4,
                         ),
                       ),
@@ -172,7 +170,7 @@ class _RagScreenState extends ConsumerState<RagScreen>
                 : s.indexingStatus != null
                     ? Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 18),
-                        child: Text(s.indexingStatus!, style: const TextStyle(color: DesignColor.sub, fontSize: 11)),
+                        child: Text(s.indexingStatus!, style: TextStyle(color: cs.onSurface.withOpacity(0.6), fontSize: 11)),
                       )
                     : const SizedBox(),
           ),
@@ -217,7 +215,7 @@ class _RagScreenState extends ConsumerState<RagScreen>
                       scrollCtrl: _scrollCtrl,
                       query: _queryCtrl.text,
                     ),
-              orElse: () => const Center(child: CircularProgressIndicator(color: DesignColor.indigo)),
+              orElse: () => Center(child: CircularProgressIndicator(color: cs.primary)),
             ),
           ),
 
@@ -244,19 +242,22 @@ class _AnswerArea extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+  
     if (answer == null && !isQuerying) {
-      return const Center(
+      return Center(
         child: Padding(
-          padding: EdgeInsets.all(32),
+          padding: const EdgeInsets.all(32),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Icon(Icons.psychology_outlined, size: 56, color: DesignColor.indigo),
-            SizedBox(height: 14),
+            Icon(Icons.psychology_outlined, size: 56, color: cs.primary),
+            const SizedBox(height: 14),
             Text('Ask anything about your notes', textAlign: TextAlign.center,
-              style: TextStyle(color: DesignColor.sub, fontSize: 14, height: 1.5)),
-            SizedBox(height: 8),
+              style: TextStyle(color: cs.onSurface.withOpacity(0.7), fontSize: 14, height: 1.5)),
+            const SizedBox(height: 8),
             Text('"Explain Dijkstra\'s algorithm"\n"What is the formula for…"\n"Summarise chapter 3"',
               textAlign: TextAlign.center,
-              style: TextStyle(color: DesignColor.muted, fontSize: 12, height: 1.6, fontStyle: FontStyle.italic)),
+              style: TextStyle(color: cs.onSurface.withOpacity(0.5), fontSize: 12, height: 1.6, fontStyle: FontStyle.italic)),
           ]),
         ),
       );
@@ -290,44 +291,49 @@ class _AnswerArea extends StatelessWidget {
           ),
         ],
         if (isQuerying)
-          Container(
+          AppCard(
             margin: const EdgeInsets.only(bottom: 12),
             padding: const EdgeInsets.all(16),
-            decoration: DesignStyles.glassCard(),
-            child: const Row(children: [
+            glass: true,
+            child: Row(children: [
               SizedBox(width: 16, height: 16,
-                child: CircularProgressIndicator(strokeWidth: 2, color: DesignColor.indigo)),
-              SizedBox(width: 12),
-              Text('Searching your notes…', style: TextStyle(color: DesignColor.sub, fontSize: 13)),
+                child: CircularProgressIndicator(strokeWidth: 2, color: cs.primary)),
+              const SizedBox(width: 12),
+              Text('Searching your notes…', style: TextStyle(color: cs.onSurface.withOpacity(0.7), fontSize: 13)),
             ]),
           )
         else if (answer != null)
-          Container(
+          AppCard(
             margin: const EdgeInsets.only(bottom: 12),
             padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: DesignColor.s1,
-              borderRadius: BorderRadius.circular(18),
-              border: const Border(left: BorderSide(color: DesignColor.indigo, width: 3)),
-            ),
+            color: cs.surfaceContainerHighest.withOpacity(0.3),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
                 Container(
                   padding: const EdgeInsets.all(4),
                   decoration: BoxDecoration(
-                    color: DesignColor.indigoGlow,
+                    color: cs.primary.withOpacity(0.15),
                     borderRadius: BorderRadius.circular(6),
                   ),
-                  child: const Icon(Icons.auto_awesome, size: 12, color: DesignColor.indigo),
+                  child: Icon(Icons.auto_awesome, size: 12, color: cs.primary),
                 ),
                 const SizedBox(width: 8),
-                const Text('Lumina AI', style: TextStyle(
-                  color: DesignColor.indigo, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.4)),
+                Text('Lumina AI', style: TextStyle(
+                  color: cs.primary, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.4)),
               ]),
               const SizedBox(height: 10),
-              SelectableText(answer!,
-                style: const TextStyle(
-                  color: DesignColor.text, fontSize: 14, height: 1.6)),
+              MarkdownBody(
+                data: answer!,
+                selectable: true,
+                styleSheet: MarkdownStyleSheet(
+                  p: theme.textTheme.bodyMedium?.copyWith(height: 1.6),
+                  code: TextStyle(fontFamily: 'monospace', backgroundColor: cs.onSurface.withOpacity(0.1), color: cs.onSurface),
+                  codeblockDecoration: BoxDecoration(
+                    color: cs.onSurface.withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
             ]),
           ),
       ],
@@ -345,11 +351,12 @@ class _QueryBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Container(
       padding: EdgeInsets.fromLTRB(14, 10, 14, MediaQuery.of(context).padding.bottom + 12),
-      decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: DesignColor.border)),
-        color: DesignColor.bg,
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: cs.onSurface.withOpacity(0.1))),
+        color: cs.surface,
       ),
       child: Row(children: [
         // Upload button
@@ -358,11 +365,11 @@ class _QueryBar extends StatelessWidget {
           child: Container(
             width: 44, height: 44,
             decoration: BoxDecoration(
-              color: DesignColor.s1,
+              color: cs.surfaceContainerHighest.withOpacity(0.5),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: DesignColor.border),
+              border: Border.all(color: cs.onSurface.withOpacity(0.1)),
             ),
-            child: const Icon(Icons.upload_file_outlined, size: 20, color: DesignColor.sub),
+            child: Icon(Icons.upload_file_outlined, size: 20, color: cs.onSurface.withOpacity(0.7)),
           ),
         ),
         const SizedBox(width: 10),
@@ -370,18 +377,18 @@ class _QueryBar extends StatelessWidget {
         Expanded(
           child: Container(
             decoration: BoxDecoration(
-              color: DesignColor.s1,
+              color: cs.surfaceContainerHighest.withOpacity(0.5),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: DesignColor.border),
+              border: Border.all(color: cs.onSurface.withOpacity(0.1)),
             ),
             child: TextField(
               controller: ctrl,
-              style: const TextStyle(color: DesignColor.text, fontSize: 14),
-              decoration: const InputDecoration(
+              style: TextStyle(color: cs.onSurface, fontSize: 14),
+              decoration: InputDecoration(
                 hintText: 'Ask about your notes or PDFs…',
-                hintStyle: TextStyle(color: DesignColor.muted, fontSize: 13),
+                hintStyle: TextStyle(color: cs.onSurface.withOpacity(0.5), fontSize: 13),
                 border: InputBorder.none,
-                contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               ),
               onSubmitted: (_) => onSend(),
               textInputAction: TextInputAction.send,
@@ -395,16 +402,16 @@ class _QueryBar extends StatelessWidget {
           child: Container(
             width: 44, height: 44,
             decoration: BoxDecoration(
-              gradient: isQuerying ? null : const LinearGradient(
-                colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+              gradient: isQuerying ? null : LinearGradient(
+                colors: [cs.primary, cs.tertiary],
                 begin: Alignment.topLeft, end: Alignment.bottomRight,
               ),
-              color: isQuerying ? DesignColor.s1 : null,
+              color: isQuerying ? cs.surfaceContainerHighest : null,
               borderRadius: BorderRadius.circular(12),
             ),
             child: isQuerying
-                ? const Center(child: SizedBox(width: 18, height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: DesignColor.indigo)))
+                ? Center(child: SizedBox(width: 18, height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: cs.primary)))
                 : const Icon(Icons.send_rounded, size: 18, color: Colors.white),
           ),
         ),
@@ -421,32 +428,28 @@ class _DocCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     final isPdf = doc.docType.toLowerCase() == 'pdf';
-    return Container(
+    return AppCard(
       width: 150,
       margin: const EdgeInsets.only(right: 10, bottom: 4, top: 4),
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: DesignColor.s1,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: DesignColor.border),
-      ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
           Icon(isPdf ? Icons.picture_as_pdf_outlined : Icons.description_outlined,
-            size: 22, color: isPdf ? DesignColor.rose : DesignColor.cyan),
+            size: 22, color: isPdf ? Colors.red : Colors.cyan),
           GestureDetector(
             onTap: onDelete,
-            child: const Icon(Icons.delete_outline, size: 16, color: DesignColor.muted),
+            child: Icon(Icons.delete_outline, size: 16, color: cs.onSurface.withOpacity(0.5)),
           ),
         ]),
         const SizedBox(height: 8),
         Text(doc.docTitle,
-          style: const TextStyle(color: DesignColor.text, fontSize: 12, fontWeight: FontWeight.w600),
+          style: TextStyle(color: cs.onSurface, fontSize: 12, fontWeight: FontWeight.w600),
           maxLines: 2, overflow: TextOverflow.ellipsis),
         const Spacer(),
         Text('${doc.chunks} chunks',
-          style: const TextStyle(color: DesignColor.muted, fontSize: 10)),
+          style: TextStyle(color: cs.onSurface.withOpacity(0.5), fontSize: 10)),
       ]),
     );
   }
@@ -457,24 +460,27 @@ class _AddDocCard extends StatelessWidget {
   const _AddDocCard({required this.onTap});
 
   @override
-  Widget build(BuildContext context) => GestureDetector(
-    onTap: onTap,
-    child: Container(
-      width: 110,
-      margin: const EdgeInsets.only(right: 10, bottom: 4, top: 4),
-      decoration: BoxDecoration(
-        border: Border.all(color: DesignColor.borderH, style: BorderStyle.solid),
-        borderRadius: BorderRadius.circular(14),
-        color: DesignColor.indigoGlow.withOpacity(0.3),
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 110,
+        margin: const EdgeInsets.only(right: 10, bottom: 4, top: 4),
+        decoration: BoxDecoration(
+          border: Border.all(color: cs.primary.withOpacity(0.3), style: BorderStyle.solid),
+          borderRadius: BorderRadius.circular(14),
+          color: cs.primary.withOpacity(0.1),
+        ),
+        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Icon(Icons.add_rounded, color: cs.primary, size: 28),
+          const SizedBox(height: 6),
+          Text('Add PDF\nor Note', textAlign: TextAlign.center,
+            style: TextStyle(color: cs.primary, fontSize: 11, fontWeight: FontWeight.w600)),
+        ]),
       ),
-      child: const Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-        Icon(Icons.add_rounded, color: DesignColor.indigo, size: 28),
-        SizedBox(height: 6),
-        Text('Add PDF\nor Note', textAlign: TextAlign.center,
-          style: TextStyle(color: DesignColor.indigo, fontSize: 11, fontWeight: FontWeight.w600)),
-      ]),
-    ),
-  );
+    );
+  }
 }
 
 // ── Empty state ───────────────────────────────────────────────────────────────
@@ -483,45 +489,40 @@ class _EmptyState extends StatelessWidget {
   const _EmptyState({required this.onUpload});
 
   @override
-  Widget build(BuildContext context) => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(32),
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Container(
-          padding: const EdgeInsets.all(24),
-          decoration: const BoxDecoration(
-            shape: BoxShape.circle, color: DesignColor.indigoGlow),
-          child: const Icon(Icons.auto_stories_outlined, size: 44, color: DesignColor.indigo),
-        ),
-        const SizedBox(height: 20),
-        const Text('No Documents Yet', style: TextStyle(
-          color: DesignColor.text, fontWeight: FontWeight.w800,
-          fontSize: 18, fontFamily: 'Syne')),
-        const SizedBox(height: 8),
-        const Text(
-          'Upload your textbook PDFs and notes. '
-          'Lumina will index them locally so you can ask questions '
-          'even without internet.',
-          textAlign: TextAlign.center,
-          style: TextStyle(color: DesignColor.sub, fontSize: 13, height: 1.5)),
-        const SizedBox(height: 24),
-        GestureDetector(
-          onTap: onUpload,
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            decoration: DesignStyles.gradientButton(),
-            child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              Icon(Icons.upload_file_outlined, color: Colors.white),
-              SizedBox(width: 10),
-              Text('Upload PDF or Notes',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
-            ]),
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle, color: cs.primary.withOpacity(0.1)),
+            child: Icon(Icons.auto_stories_outlined, size: 44, color: cs.primary),
           ),
-        ),
-      ]),
-    ),
-  );
+          const SizedBox(height: 20),
+          Text('No Documents Yet', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 8),
+          Text(
+            'Upload your textbook PDFs and notes. '
+            'Lumina will index them locally so you can ask questions '
+            'even without internet.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: cs.onSurface.withOpacity(0.7), fontSize: 13, height: 1.5)),
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            child: AppButton(
+              text: 'Upload PDF or Notes',
+              icon: Icons.upload_file_outlined,
+              onPressed: onUpload,
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
 }
 
 // ── Ambient glow orb ──────────────────────────────────────────────────────────

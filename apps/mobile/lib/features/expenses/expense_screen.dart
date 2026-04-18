@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme/design_tokens.dart';
+import '../../shared/widgets/shimmer_widgets.dart';
 import 'expense_provider.dart';
 import 'expense_cats.dart';
 
@@ -196,7 +197,7 @@ class _ExpenseScreenState extends ConsumerState<ExpenseScreen>
         ),
       ),
       body: expenses.when(
-        loading: () => const Center(child: CircularProgressIndicator(color: DesignColor.indigo)),
+        loading: () => const ExpensesShimmer(),
         error: (e, _) => Center(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             const Icon(Icons.wifi_off_outlined, size: 48, color: DesignColor.rose),
