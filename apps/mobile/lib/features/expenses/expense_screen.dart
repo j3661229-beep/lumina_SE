@@ -14,6 +14,10 @@ double _asDouble(dynamic v) {
   return double.tryParse(v.toString()) ?? 0;
 }
 
+// Backend returns 'expenseDate' (Prisma camelCase), fallback to 'date'
+String? _expDate(dynamic e) =>
+    (e['expenseDate'] as String?) ?? (e['date'] as String?);
+
 // ── Screen ────────────────────────────────────────────────────────────────────
 class ExpenseScreen extends ConsumerStatefulWidget {
   const ExpenseScreen({super.key});
@@ -175,60 +179,130 @@ class _ExpenseScreenState extends ConsumerState<ExpenseScreen>
       body: NestedScrollView(
         headerSliverBuilder: (ctx, _) => [
           SliverAppBar(
-            expandedHeight: 180,
-            pinned: false,
+            expandedHeight: 200,
+            pinned: true,
             stretch: true,
-            backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+            elevation: 0,
+            backgroundColor: isDark ? AppColors.darkBg : const Color(0xFF059669),
+            systemOverlayStyle: SystemUiOverlayStyle.light,
             flexibleSpace: FlexibleSpaceBar(
-              stretchModes: const [StretchMode.blurBackground],
+              collapseMode: CollapseMode.parallax,
               background: Container(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: isDark
-                        ? [AppColors.green.withOpacity(0.25), Colors.transparent]
-                        : [AppColors.green.withOpacity(0.1), Colors.transparent],
+                        ? [const Color(0xFF064E3B), const Color(0xFF080B1F)]
+                        : [const Color(0xFF059669), const Color(0xFF10B981)],
                     begin: Alignment.topLeft, end: Alignment.bottomRight,
                   ),
                 ),
-                child: SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                    child: expAsync.when(
-                      loading: () => const SizedBox(),
-                      error: (_, __) => const SizedBox(),
-                      data: (expenses) {
-                        final now = DateTime.now();
-                        double monthTotal = 0;
-                        for (final e in expenses) {
-                          final d = DateTime.tryParse(e['date'] as String? ?? '');
-                          if (d != null && d.month == now.month && d.year == now.year) {
-                            monthTotal += _asDouble(e['amount']);
-                          }
-                        }
-                        return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text('Finance', style: TextStyle(
-                            fontFamily: 'Syne', fontWeight: FontWeight.w800, fontSize: 26, color: cs.onSurface)),
-                          const SizedBox(height: 4),
-                          Text('This month', style: TextStyle(
-                            color: cs.onSurface.withOpacity(0.45), fontSize: 12)),
-                          const SizedBox(height: 8),
-                          Row(children: [
-                            Text('₹${monthTotal.toStringAsFixed(0)}',
-                              style: TextStyle(
-                                fontFamily: 'Syne', fontWeight: FontWeight.w800, fontSize: 36,
-                                color: AppColors.green)),
-                            const Spacer(),
-                            _ActionBtn(icon: Icons.bar_chart_rounded, label: 'Weekly Wrap',
-                              color: AppColors.amber,
-                              onTap: () => context.push('/weekly-wrap')),
-                          ]),
-                        ]);
-                      },
+                child: Stack(children: [
+                  // Decorative circle
+                  Positioned(top: -30, right: -40,
+                    child: Container(
+                      width: 200, height: 200,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: RadialGradient(colors: [
+                          Colors.white.withOpacity(0.07), Colors.transparent])),
                     ),
                   ),
-                ),
+                  SafeArea(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+                      child: expAsync.when(
+                        loading: () => const SizedBox(),
+                        error: (_, __) => const SizedBox(),
+                        data: (expenses) {
+                          final now = DateTime.now();
+                          double monthTotal = 0; int monthCount = 0;
+                          double weekTotal = 0;
+                          for (final e in expenses) {
+                            final d = DateTime.tryParse(_expDate(e) ?? '');
+                            if (d != null && d.month == now.month && d.year == now.year) {
+                              monthTotal += _asDouble(e['amount']); monthCount++;
+                            }
+                            if (d != null && now.difference(d).inDays < 7) {
+                              weekTotal += _asDouble(e['amount']);
+                            }
+                          }
+                          return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Row(children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(color: Colors.white.withOpacity(0.2)),
+                                ),
+                                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                  const Icon(Icons.calendar_month_rounded,
+                                      color: Colors.white70, size: 11),
+                                  const SizedBox(width: 4),
+                                  Text(DateFormat('MMMM yyyy').format(now),
+                                    style: const TextStyle(color: Colors.white70, fontSize: 10,
+                                      fontWeight: FontWeight.w600)),
+                                ]),
+                              ),
+                              const Spacer(),
+                              GestureDetector(
+                                onTap: () => context.push('/weekly-wrap'),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.15),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(color: Colors.white.withOpacity(0.25)),
+                                  ),
+                                  child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                                    Icon(Icons.bar_chart_rounded, color: Colors.white, size: 13),
+                                    SizedBox(width: 5),
+                                    Text('Weekly Wrap', style: TextStyle(
+                                      color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
+                                  ]),
+                                ),
+                              ),
+                            ]),
+                            const SizedBox(height: 10),
+                            Text('This Month', style: TextStyle(
+                              color: Colors.white.withOpacity(0.7), fontSize: 12)),
+                            Text('₹${monthTotal.toStringAsFixed(0)}',
+                              style: const TextStyle(
+                                fontFamily: 'Syne', fontWeight: FontWeight.w800,
+                                fontSize: 38, color: Colors.white, height: 1.1)),
+                            const SizedBox(height: 6),
+                            Row(children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(20)),
+                                child: Text('$monthCount transactions',
+                                  style: const TextStyle(color: Colors.white70, fontSize: 10,
+                                    fontWeight: FontWeight.w600)),
+                              ),
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(20)),
+                                child: Text('₹${weekTotal.toStringAsFixed(0)} this week',
+                                  style: const TextStyle(color: Colors.white70, fontSize: 10,
+                                    fontWeight: FontWeight.w600)),
+                              ),
+                            ]),
+                          ]);
+                        },
+                      ),
+                    ),
+                  ),
+                ]),
               ),
             ),
+            title: const Text('Finance',
+              style: TextStyle(fontFamily: 'Syne', fontWeight: FontWeight.w800,
+                color: Colors.white, fontSize: 18)),
           ),
           // Category filter tabs
           SliverToBoxAdapter(
@@ -257,8 +331,8 @@ class _ExpenseScreenState extends ConsumerState<ExpenseScreen>
           data: (expenses) {
             if (expenses.isEmpty) return _buildEmpty();
             final sorted = [...expenses]..sort((a, b) {
-              final da = DateTime.tryParse(a['date'] as String? ?? '') ?? DateTime(0);
-              final db = DateTime.tryParse(b['date'] as String? ?? '') ?? DateTime(0);
+              final da = DateTime.tryParse(_expDate(a) ?? '') ?? DateTime(0);
+              final db = DateTime.tryParse(_expDate(b) ?? '') ?? DateTime(0);
               return db.compareTo(da);
             });
             return ListView.builder(
@@ -273,13 +347,24 @@ class _ExpenseScreenState extends ConsumerState<ExpenseScreen>
           },
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _addExpense(),
-        backgroundColor: AppColors.indigo,
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('Add', style: TextStyle(fontWeight: FontWeight.w700)),
-        elevation: 8,
+      floatingActionButton: Container(
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [AppColors.green, Color(0xFF059669)],
+            begin: Alignment.topLeft, end: Alignment.bottomRight),
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: const [
+            BoxShadow(color: Color(0x5510B981), blurRadius: 20, offset: Offset(0, 6))],
+        ),
+        child: FloatingActionButton.extended(
+          onPressed: () => _addExpense(),
+          backgroundColor: Colors.transparent,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          icon: const Icon(Icons.add_rounded),
+          label: const Text('Log Expense',
+            style: TextStyle(fontWeight: FontWeight.w700, fontFamily: 'Syne')),
+        ),
       ),
     );
   }
@@ -318,7 +403,7 @@ class _ExpenseTile extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final cat = catFor(expense['category'] as String? ?? 'other');
     final amount = _asDouble(expense['amount']);
-    final date = DateTime.tryParse(expense['date'] as String? ?? '');
+    final date = DateTime.tryParse(_expDate(expense) ?? '');
     final dateStr = date != null ? DateFormat('d MMM, EEE').format(date) : '';
     final desc = expense['description'] as String? ?? cat.label;
 

@@ -162,54 +162,68 @@ class _RagScreenState extends ConsumerState<RagScreen>
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Column(children: [
-        // ── Header ─────────────────────────────────────────────────────────
+        // ── Premium header ─────────────────────────────────────────────────
         Container(
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: isDark
-                  ? [AppColors.violet.withOpacity(0.25), Colors.transparent]
-                  : [AppColors.violet.withOpacity(0.08), Colors.transparent],
+                  ? [const Color(0xFF1E1B4B), AppColors.darkBg]
+                  : [const Color(0xFF4F46E5), const Color(0xFF6D28D9)],
               begin: Alignment.topLeft, end: Alignment.bottomRight,
             ),
           ),
           child: SafeArea(
             bottom: false,
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
               child: Row(children: [
+                // AI avatar orb
+                Container(
+                  width: 44, height: 44,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [AppColors.indigo, AppColors.violet],
+                      begin: Alignment.topLeft, end: Alignment.bottomRight),
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: const [BoxShadow(
+                      color: Color(0x556366F1), blurRadius: 16, offset: Offset(0, 4))],
+                  ),
+                  child: const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 20),
+                ),
+                const SizedBox(width: 12),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('Second Brain', style: TextStyle(
-                    fontFamily: 'Syne', fontSize: 22, fontWeight: FontWeight.w800,
-                    color: cs.onSurface)),
+                  const Text('Second Brain', style: TextStyle(
+                    fontFamily: 'Syne', fontSize: 18, fontWeight: FontWeight.w800,
+                    color: Colors.white)),
                   ragAsync.when(
                     loading: () => Text('Loading…', style: TextStyle(
-                      color: cs.onSurface.withOpacity(0.45), fontSize: 11)),
+                      color: Colors.white.withOpacity(0.5), fontSize: 11)),
                     error: (_, __) => const SizedBox(),
                     data: (s) => Row(children: [
-                      // Pulse dot
                       ScaleTransition(
                         scale: _pulse,
                         child: Container(
-                          width: 7, height: 7,
-                          decoration: const BoxDecoration(
-                            color: AppColors.green, shape: BoxShape.circle,
-                            boxShadow: [BoxShadow(color: AppColors.green, blurRadius: 6)]),
+                          width: 6, height: 6,
+                          decoration: BoxDecoration(
+                            color: s.isIndexing ? AppColors.amber : AppColors.green,
+                            shape: BoxShape.circle,
+                            boxShadow: [BoxShadow(
+                              color: (s.isIndexing ? AppColors.amber : AppColors.green).withOpacity(0.6),
+                              blurRadius: 6)]),
                         ),
                       ),
                       const SizedBox(width: 6),
-                      Flexible(
-                        child: Text(
-                          s.isIndexing
-                              ? s.indexingStatus ?? 'Indexing…'
-                              : 'Offline AI · ${s.docs.length} docs · ${s.totalChunks} chunks',
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: s.isIndexing ? AppColors.indigo : cs.onSurface.withOpacity(0.45),
-                            fontSize: 11,
-                            fontWeight: s.isIndexing ? FontWeight.w700 : FontWeight.normal,
-                          ),
+                      Flexible(child: Text(
+                        s.isIndexing
+                            ? s.indexingStatus ?? 'Indexing…'
+                            : 'Offline AI · ${s.docs.length} docs · ${s.totalChunks} chunks',
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.65),
+                          fontSize: 11,
+                          fontWeight: s.isIndexing ? FontWeight.w700 : FontWeight.w500,
                         ),
-                      ),
+                      )),
                     ]),
                   ),
                 ])),
@@ -220,7 +234,6 @@ class _RagScreenState extends ConsumerState<RagScreen>
                   onTap: () => setState(() => _showDocs = !_showDocs),
                 ),
                 const SizedBox(width: 8),
-                // Clear chat
                 if (_messages.isNotEmpty)
                   _NavBtn(
                     icon: Icons.cleaning_services_outlined,
@@ -529,32 +542,46 @@ class _Suggestions extends StatelessWidget {
   const _Suggestions({required this.onTap});
 
   static const _items = [
-    'Explain Dijkstra\'s algorithm',
-    'Summarise chapter 3',
-    'Key formulas for exam',
-    'What is this topic about?',
+    (icon: '🎯', text: 'Explain Dijkstra\'s algorithm'),
+    (icon: '📖', text: 'Summarise chapter 3'),
+    (icon: '📐', text: 'Key formulas for exam'),
+    (icon: '🧠', text: 'What is this topic about?'),
   ];
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
+    final isDark = context.isDark;
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('Try asking…', style: TextStyle(color: cs.onSurface.withOpacity(0.4), fontSize: 11, fontWeight: FontWeight.w600)),
-        const SizedBox(height: 8),
-        Wrap(spacing: 8, runSpacing: 6, children: _items.map((s) =>
+        Padding(
+          padding: const EdgeInsets.only(left: 4, bottom: 8),
+          child: Text('Try asking…',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.45),
+              fontSize: 11, fontWeight: FontWeight.w600)),
+        ),
+        Wrap(spacing: 8, runSpacing: 8, children: _items.map((item) =>
           GestureDetector(
-            onTap: () => onTap(s),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+            onTap: () => onTap(item.text),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                color: AppColors.indigo.withOpacity(0.08),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: AppColors.indigo.withOpacity(0.2)),
+                color: isDark
+                    ? AppColors.indigo.withOpacity(0.1)
+                    : AppColors.indigo.withOpacity(0.06),
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(
+                  color: AppColors.indigo.withOpacity(isDark ? 0.3 : 0.2)),
               ),
-              child: Text(s, style: const TextStyle(
-                color: AppColors.indigo, fontSize: 11.5, fontWeight: FontWeight.w600)),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Text(item.icon, style: const TextStyle(fontSize: 13)),
+                const SizedBox(width: 6),
+                Text(item.text,
+                  style: const TextStyle(
+                    color: AppColors.indigo, fontSize: 12, fontWeight: FontWeight.w600)),
+              ]),
             ),
           ),
         ).toList()),
@@ -801,39 +828,84 @@ class _EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final isDark = context.isDark;
     return Center(child: Padding(
-      padding: const EdgeInsets.all(40),
+      padding: const EdgeInsets.symmetric(horizontal: 32),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
+        // Glowing AI brain icon
         Container(
-          padding: const EdgeInsets.all(28),
+          width: 110, height: 110,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            gradient: LinearGradient(colors: [AppColors.indigo.withOpacity(0.2), AppColors.violet.withOpacity(0.1)]),
+            gradient: const LinearGradient(
+              colors: [AppColors.indigo, AppColors.violet],
+              begin: Alignment.topLeft, end: Alignment.bottomRight),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.indigo.withOpacity(isDark ? 0.5 : 0.3),
+                blurRadius: 40, offset: const Offset(0, 8)),
+            ],
           ),
-          child: const Icon(Icons.auto_stories_rounded, size: 52, color: AppColors.indigo),
+          child: const Icon(Icons.psychology_rounded, size: 52, color: Colors.white),
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 28),
         Text('Your Second Brain', style: TextStyle(
-          fontFamily: 'Syne', fontWeight: FontWeight.w800, fontSize: 22, color: cs.onSurface)),
+          fontFamily: 'Syne', fontWeight: FontWeight.w800, fontSize: 24,
+          color: cs.onSurface)),
         const SizedBox(height: 10),
-        Text('Upload textbook PDFs and notes. Lumina indexes them locally — then you can ask anything, even offline.',
+        Text(
+          'Upload textbook PDFs and notes. Lumina indexes them locally — then you can ask anything, even offline.',
           textAlign: TextAlign.center,
-          style: TextStyle(color: cs.onSurface.withOpacity(0.5), fontSize: 13, height: 1.6)),
+          style: TextStyle(color: cs.onSurface.withOpacity(0.5), fontSize: 13, height: 1.65)),
+        const SizedBox(height: 24),
+        // Feature pills
+        Wrap(spacing: 8, runSpacing: 8, alignment: WrapAlignment.center, children: [
+          _FeaturePill('🔒 100% Offline', AppColors.green),
+          _FeaturePill('📄 PDF & Notes', AppColors.indigo),
+          _FeaturePill('⚡ Instant Search', AppColors.amber),
+        ]),
         const SizedBox(height: 28),
         GestureDetector(
           onTap: onUpload,
           child: Container(
-            width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 16),
-            decoration: DesignStyles.gradientButton(),
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [AppColors.indigo, AppColors.violet],
+                begin: Alignment.topLeft, end: Alignment.bottomRight),
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: const [
+                BoxShadow(color: Color(0x556366F1), blurRadius: 20, offset: Offset(0, 6))],
+            ),
             child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              Icon(Icons.upload_file_outlined, color: Colors.white, size: 20),
+              Icon(Icons.upload_file_rounded, color: Colors.white, size: 20),
               SizedBox(width: 10),
               Text('Upload PDF or Notes', style: TextStyle(
-                color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
+                color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15,
+                fontFamily: 'Syne')),
             ]),
           ),
         ),
       ]),
     ));
   }
+}
+
+class _FeaturePill extends StatelessWidget {
+  final String label;
+  final Color color;
+  const _FeaturePill(this.label, this.color);
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+    decoration: BoxDecoration(
+      color: color.withOpacity(0.1),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: color.withOpacity(0.25)),
+    ),
+    child: Text(label, style: TextStyle(
+      color: color, fontSize: 11, fontWeight: FontWeight.w700)),
+  );
 }

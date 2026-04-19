@@ -13,80 +13,139 @@ class FlowGraphScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final stateAsync = ref.watch(contextSwitchProvider);
-    final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Cognitive Flow',
-                style: TextStyle(fontFamily: 'Syne', fontWeight: FontWeight.w800, fontSize: 20)),
-            stateAsync.when(
-              loading: () => const Text('loading...', style: TextStyle(fontSize: 11, color: Colors.grey)),
-              error: (_, __) => const SizedBox.shrink(),
-              data: (s) => Row(mainAxisSize: MainAxisSize.min, children: [
-                Container(width: 6, height: 6,
-                  decoration: BoxDecoration(
-                    color: s.isMonitoring ? AppColors.green : AppColors.amber,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 5),
-                Text(
-                  s.dndEnabled
-                      ? 'Focus Mode ON'
-                      : s.isMonitoring ? 'Live Monitoring' : 'Permission required',
-                  style: TextStyle(
-                    fontSize: 11, fontWeight: FontWeight.w600,
-                    color: s.dndEnabled ? AppColors.rose : s.isMonitoring ? AppColors.green : AppColors.amber,
-                  ),
-                ),
-              ]),
-            ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.auto_awesome, color: AppColors.amber),
-            tooltip: 'Load Demo Data',
-            onPressed: () {
-              HapticFeedback.mediumImpact();
-              ref.read(contextSwitchProvider.notifier).seedDemoData();
-            },
-          ),
-          IconButton(
-            icon: Icon(Icons.refresh_outlined, color: cs.onSurface.withOpacity(0.5)),
-            onPressed: () => ref.read(contextSwitchProvider.notifier).refresh(),
-          ),
-        ],
-      ),
       body: stateAsync.when(
         loading: () => const FlowShimmer(),
         error: (e, _) => _ErrorState(error: '$e'),
         data: (state) {
+          final accent = state.dndEnabled ? AppColors.rose : AppColors.indigo;
           // Show DND alert banner if a blocked app was opened
           return Stack(children: [
-            RefreshIndicator(
-              onRefresh: () => ref.read(contextSwitchProvider.notifier).refresh(),
-              child: ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 120),
-                children: [
+            Column(children: [
+              // ── Premium gradient header ─────────────────────────────────────
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 400),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: state.dndEnabled
+                        ? [const Color(0xFF7F1D1D), const Color(0xFF080B1F)]
+                        : [const Color(0xFF1E1B4B), const Color(0xFF080B1F)],
+                    begin: Alignment.topLeft, end: Alignment.bottomRight,
+                  ),
+                ),
+                child: SafeArea(
+                  bottom: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                    child: Row(children: [
+                      // Icon avatar
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 400),
+                        width: 44, height: 44,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: state.dndEnabled
+                                ? [AppColors.rose, const Color(0xFFB91C1C)]
+                                : [AppColors.indigo, AppColors.violet],
+                            begin: Alignment.topLeft, end: Alignment.bottomRight),
+                          borderRadius: BorderRadius.circular(14),
+                          boxShadow: [BoxShadow(
+                            color: accent.withOpacity(0.5),
+                            blurRadius: 16, offset: const Offset(0, 4))],
+                        ),
+                        child: Icon(
+                          state.dndEnabled
+                              ? Icons.do_not_disturb_on_rounded
+                              : Icons.psychology_rounded,
+                          color: Colors.white, size: 22),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        const Text('Cognitive Flow',
+                          style: TextStyle(
+                            fontFamily: 'Syne', fontWeight: FontWeight.w800,
+                            fontSize: 18, color: Colors.white)),
+                        Row(children: [
+                          Container(
+                            width: 5, height: 5,
+                            decoration: BoxDecoration(
+                              color: state.dndEnabled ? AppColors.rose
+                                  : state.isMonitoring ? AppColors.green : AppColors.amber,
+                              shape: BoxShape.circle,
+                              boxShadow: [BoxShadow(
+                                color: (state.dndEnabled ? AppColors.rose
+                                    : state.isMonitoring ? AppColors.green : AppColors.amber).withOpacity(0.8),
+                                blurRadius: 5)]),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            state.dndEnabled ? '🛡️ Focus Mode ACTIVE'
+                                : state.isMonitoring ? 'Live Monitoring'
+                                : 'Permission required',
+                            style: TextStyle(
+                              fontSize: 11, fontWeight: FontWeight.w600,
+                              color: state.dndEnabled ? AppColors.rose.withOpacity(0.9)
+                                  : Colors.white.withOpacity(0.6),
+                            ),
+                          ),
+                        ]),
+                      ])),
+                      // Seed demo
+                      GestureDetector(
+                        onTap: () {
+                          HapticFeedback.mediumImpact();
+                          ref.read(contextSwitchProvider.notifier).seedDemoData();
+                        },
+                        child: Container(
+                          width: 36, height: 36,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: Colors.white.withOpacity(0.2)),
+                          ),
+                          child: const Icon(Icons.auto_awesome_rounded,
+                            color: AppColors.amber, size: 18),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      GestureDetector(
+                        onTap: () => ref.read(contextSwitchProvider.notifier).refresh(),
+                        child: Container(
+                          width: 36, height: 36,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: Colors.white.withOpacity(0.2)),
+                          ),
+                          child: const Icon(Icons.refresh_outlined,
+                            color: Colors.white70, size: 18),
+                        ),
+                      ),
+                    ]),
+                  ),
+                ),
+              ),
+              // ── DND Toggle Card — always pinned, never inside scroll ────
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: _DndCard(),
+              ),
+              // body scroll area
+              Expanded(
+                child: RefreshIndicator(
+                  onRefresh: () => ref.read(contextSwitchProvider.notifier).refresh(),
+                  child: ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
+                    children: [
                   if (!state.hasPermission) ...[
-                    const SizedBox(height: 12),
                     _PermissionBanner(
                       onTap: () => ref.read(contextSwitchProvider.notifier).requestPermission(),
                     ),
+                    const SizedBox(height: 12),
                   ],
-                  const SizedBox(height: 12),
-                  // ── DND Card ──────────────────────────────────────────────
-                  _DndCard(state: state),
-                  const SizedBox(height: 16),
                   // ── Debt Gauge ────────────────────────────────────────────
                   _DebtGauge(score: state.score, message: state.statusMessage),
                   const SizedBox(height: 16),
@@ -116,16 +175,19 @@ class FlowGraphScreen extends ConsumerWidget {
                   const SizedBox(height: 16),
                   // ── Tips ──────────────────────────────────────────────────
                   _TipsCard(score: state.score),
-                ],
-              ),
-            ),
-            // ── DND Alert Overlay ──────────────────────────────────────────
-            if (state.dndAlert != null)
-              _DndAlertOverlay(
-                message: state.dndAlert!,
-                onDismiss: () => ref.read(contextSwitchProvider.notifier).clearDndAlert(),
-              ),
-          ]);
+                ],   // close ListView children
+              ),    // close ListView
+            ),     // close RefreshIndicator
+          ),       // close Expanded
+        ],         // close Column children
+      ),           // close Column
+      // ── DND Alert Overlay ──────────────────────────────────────────
+      if (state.dndAlert != null)
+        _DndAlertOverlay(
+          message: state.dndAlert!,
+          onDismiss: () => ref.read(contextSwitchProvider.notifier).clearDndAlert(),
+        ),
+    ]);          // close Stack children
         },
       ),
     );
@@ -136,8 +198,7 @@ class FlowGraphScreen extends ConsumerWidget {
 // DND Card + App Picker
 // ─────────────────────────────────────────────────────────────────────────────
 class _DndCard extends ConsumerStatefulWidget {
-  final CognitiveState state;
-  const _DndCard({required this.state});
+  const _DndCard();
 
   @override
   ConsumerState<_DndCard> createState() => _DndCardState();
@@ -156,7 +217,10 @@ class _DndCardState extends ConsumerState<_DndCard> {
 
   @override
   Widget build(BuildContext context) {
-    final s = widget.state;
+    // Read directly from provider so the card always reflects live state
+    final stateAsync = ref.watch(contextSwitchProvider);
+    final s = stateAsync.valueOrNull;
+    if (s == null) return const SizedBox.shrink();
     final cs = Theme.of(context).colorScheme;
     final accent = s.dndEnabled ? AppColors.rose : AppColors.indigo;
 

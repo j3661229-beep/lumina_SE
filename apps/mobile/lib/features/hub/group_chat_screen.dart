@@ -100,6 +100,28 @@ class _GroupChatScreenState extends ConsumerState<GroupChatScreen> {
   void _subscribeRealtime() {
     _channel = _supabase
         .channel('chat_${widget.groupId}')
+        .onBroadcast(
+          event: 'new_message',
+          callback: (payload) async {
+            final msg = Map<String, dynamic>.from(payload);
+            // Ignore if it's from us (we add optimistic locally)
+            if (msg['sender_id'] == _myId) return;
+            
+            // Add or replace
+            if (mounted) {
+              setState(() {
+                final idx = _messages.indexWhere((m) => m['id'] == msg['id']);
+                if (idx >= 0) {
+                  _messages[idx] = msg;
+                } else {
+                  _messages.add(msg);
+                }
+              });
+              _scrollToBottom();
+            }
+          },
+        )
+        // Also keep POSTGRES changes enabled as a fallback
         .onPostgresChanges(
           event: PostgresChangeEvent.insert,
           schema: 'public',
@@ -111,7 +133,10 @@ class _GroupChatScreenState extends ConsumerState<GroupChatScreen> {
           ),
           callback: (payload) async {
             final msg = Map<String, dynamic>.from(payload.newRecord);
-            // Fetch sender name
+            // Prevent duplication from postgres if already added
+            if (_messages.any((m) => m['id'] == msg['id'])) return;
+
+            // Fetch sender name safely
             try {
               final profile = await _supabase
                   .from('profiles')
@@ -122,7 +147,7 @@ class _GroupChatScreenState extends ConsumerState<GroupChatScreen> {
             } catch (_) {
               msg['sender_name'] = 'User';
             }
-            if (mounted) {
+            if (mounted && !_messages.any((m) => m['id'] == msg['id'])) {
               setState(() => _messages.add(msg));
               _scrollToBottom();
             }
@@ -189,12 +214,21 @@ class _GroupChatScreenState extends ConsumerState<GroupChatScreen> {
       if (mounted) {
         setState(() {
           final idx = _messages.indexWhere((m) => m['id'] == optimistic['id']);
+          final realMsg = {
+            ...Map<String, dynamic>.from(result),
+            'sender_name': optimistic['sender_name'],
+          };
           if (idx >= 0) {
-            _messages[idx] = {
-              ...Map<String, dynamic>.from(result),
-              'sender_name': optimistic['sender_name'],
-            };
+            _messages[idx] = realMsg;
+          } else {
+            _messages.add(realMsg);
           }
+          // Broadcast to others in real-time
+          _channel?.send(
+            type: RealtimeListenTypes.broadcast,
+            event: 'new_message',
+            payload: realMsg,
+          );
         });
       }
     } catch (e) {

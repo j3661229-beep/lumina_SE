@@ -906,7 +906,6 @@ class _KanbanColumn extends StatefulWidget {
   final void Function(Map<String, dynamic>) onDrop;
   final void Function(Map<String, dynamic>)? onDelete;
   final void Function(Map<String, dynamic>) onTap;
-  final bool showGroupBadge;
 
   const _KanbanColumn({
     required this.col,
@@ -914,7 +913,6 @@ class _KanbanColumn extends StatefulWidget {
     required this.onDrop,
     required this.onTap,
     this.onDelete,
-    this.showGroupBadge = false,
   });
 
   @override
@@ -1118,7 +1116,6 @@ class _KanbanColumnState extends State<_KanbanColumn>
                 dragging: true,
                 onDelete: null,
                 onTap: () {},
-                showGroupBadge: widget.showGroupBadge,
               ),
             ),
           ),
@@ -1128,14 +1125,12 @@ class _KanbanColumnState extends State<_KanbanColumn>
               task: widget.tasks[i],
               onDelete: null,
               onTap: () {},
-              showGroupBadge: widget.showGroupBadge,
             ),
           ),
           child: _TaskCard(
             task: widget.tasks[i],
             onDelete: widget.onDelete != null ? () => widget.onDelete!(widget.tasks[i]) : null,
             onTap: () => widget.onTap(widget.tasks[i]),
-            showGroupBadge: widget.showGroupBadge,
           ),
         ),
       ),

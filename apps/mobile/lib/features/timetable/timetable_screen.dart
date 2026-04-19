@@ -367,46 +367,92 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = context.isDark;
+    final attColor = avgAttendance >= 75 ? AppColors.green
+        : avgAttendance >= 60 ? AppColors.amber : AppColors.rose;
+
     return Container(
-      padding: const EdgeInsets.fromLTRB(18, 50, 18, 16),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [Color(0x1A6366F1), Colors.transparent],
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
+          colors: isDark
+              ? [const Color(0xFF1E1B4B), const Color(0xFF080B1F)]
+              : [const Color(0xFF4F46E5), const Color(0xFF6D28D9)],
+          begin: Alignment.topLeft, end: Alignment.bottomRight,
         ),
       ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        // Top row
-        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(todayLabel, style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5), fontSize: 12, fontWeight: FontWeight.w500)),
-            const SizedBox(height: 4),
-            Text('My Timetable',
-              style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 22, fontWeight: FontWeight.w800, fontFamily: 'Syne')),
-          ]),
-          Row(children: [
-            _HeaderBtn(icon: Icons.person_outline, onTap: () => context.push('/profile')),
-            const SizedBox(width: 8),
-            if (!hasSlots)
-              _HeaderBtn(icon: Icons.document_scanner_outlined, onTap: onScan),
-            if (!hasSlots) const SizedBox(width: 8),
-            _HeaderBtn(icon: Icons.analytics_outlined, onTap: onBunk),
-            if (hasSlots) ...[
-              const SizedBox(width: 8),
-              _HeaderBtn(icon: Icons.delete_outline, onTap: onDelete, color: AppColors.rose),
-            ],
-          ]),
-        ]),
-        const SizedBox(height: 14),
-        // Stats pills
-        Row(children: [
-          _StatPill(emoji: '📚', label: 'Today', value: '$classesToday', color: AppColors.indigo),
-          const SizedBox(width: 10),
-          _StatPill(emoji: '✅', label: 'Avg Att.', value: '${avgAttendance.round()}%', color: AppColors.green),
-          const SizedBox(width: 10),
-          _StatPill(emoji: '😈', label: 'Bunks Left', value: '$bunksLeft', color: AppColors.amber),
-        ]),
+      child: Stack(children: [
+        // Decorative orb
+        Positioned(top: -40, right: -50,
+          child: Container(
+            width: 200, height: 200,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(colors: [
+                Colors.white.withOpacity(0.05), Colors.transparent])),
+          ),
+        ),
+        SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 16, 18, 20),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              // Top row
+              Row(children: [
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Row(children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: Colors.white.withOpacity(0.2)),
+                        ),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          Container(
+                            width: 5, height: 5,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFF4ADE80), shape: BoxShape.circle),
+                          ),
+                          const SizedBox(width: 5),
+                          Text(todayLabel,
+                            style: const TextStyle(color: Colors.white70, fontSize: 10,
+                              fontWeight: FontWeight.w600)),
+                        ]),
+                      ),
+                    ]),
+                    const SizedBox(height: 8),
+                    const Text('My Timetable',
+                      style: TextStyle(
+                        color: Colors.white, fontSize: 26,
+                        fontWeight: FontWeight.w800, fontFamily: 'Syne')),
+                  ]),
+                ),
+                Row(children: [
+                  _HeaderBtn(icon: Icons.person_outline, onTap: () => context.push('/profile')),
+                  const SizedBox(width: 8),
+                  if (!hasSlots) ...[
+                    _HeaderBtn(icon: Icons.document_scanner_outlined, onTap: onScan),
+                    const SizedBox(width: 8),
+                  ],
+                  _HeaderBtn(icon: Icons.analytics_outlined, onTap: onBunk),
+                  if (hasSlots) ...[
+                    const SizedBox(width: 8),
+                    _HeaderBtn(icon: Icons.delete_outline, onTap: onDelete, color: AppColors.rose),
+                  ],
+                ]),
+              ]),
+              const SizedBox(height: 16),
+              // Stats row
+              Row(children: [
+                _StatPill(emoji: '📚', label: 'Today', value: '$classesToday', color: AppColors.cyan),
+                const SizedBox(width: 10),
+                _StatPill(emoji: '✅', label: 'Att.', value: '${avgAttendance.round()}%', color: attColor),
+                const SizedBox(width: 10),
+                _StatPill(emoji: '😈', label: 'Bunks Left', value: '$bunksLeft', color: AppColors.amber),
+              ]),
+            ]),
+          ),
+        ),
       ]),
     );
   }
@@ -424,11 +470,11 @@ class _HeaderBtn extends StatelessWidget {
     child: Container(
       width: 38, height: 38,
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.06),
+        color: Colors.white.withOpacity(0.15),
         borderRadius: BorderRadius.circular(11),
-        border: Border.all(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.1)),
+        border: Border.all(color: Colors.white.withOpacity(0.25)),
       ),
-      child: Icon(icon, color: color ?? Theme.of(context).colorScheme.onSurface.withOpacity(0.5), size: 18),
+      child: Icon(icon, color: color ?? Colors.white, size: 18),
     ),
   );
 }
@@ -441,17 +487,20 @@ class _StatPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Expanded(
     child: Container(
-      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.05),
+        color: Colors.white.withOpacity(0.12),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.08)),
+        border: Border.all(color: Colors.white.withOpacity(0.2)),
       ),
       child: Column(children: [
-        Text(emoji, style: const TextStyle(fontSize: 16)),
+        Text(emoji, style: const TextStyle(fontSize: 18)),
         const SizedBox(height: 4),
-        Text(value, style: TextStyle(color: color, fontSize: 18, fontWeight: FontWeight.w800, fontFamily: 'Syne')),
-        Text(label, style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4), fontSize: 9, fontWeight: FontWeight.w600)),
+        Text(value, style: const TextStyle(
+          color: Colors.white, fontSize: 18,
+          fontWeight: FontWeight.w800, fontFamily: 'Syne')),
+        Text(label, style: TextStyle(
+          color: Colors.white.withOpacity(0.65), fontSize: 9, fontWeight: FontWeight.w600)),
       ]),
     ),
   );

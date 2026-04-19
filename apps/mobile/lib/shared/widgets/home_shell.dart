@@ -102,7 +102,7 @@ class _GlowOrbState extends State<_GlowOrb> with SingleTickerProviderStateMixin 
     );
 }
 
-// ── Premium bottom navigation bar ──────────────────────────────────────────────────
+// ── Premium glassmorphism bottom navigation bar ─────────────────────────────
 class _LuminaBottomNav extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;
@@ -117,25 +117,34 @@ class _LuminaBottomNav extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = context.isDark;
-    final navBg = isDark ? AppColors.darkSurface : Colors.white;
-    final navBorder = isDark ? AppColors.darkBorder : AppColors.lightBorder;
 
     return Container(
       decoration: BoxDecoration(
-        color: navBg,
-        border: Border(top: BorderSide(color: navBorder, width: 0.5)),
+        color: isDark
+            ? const Color(0xE6080B1F)   // 90% opacity dark bg
+            : const Color(0xF0FFFFFF),  // 94% opacity white
+        border: Border(
+          top: BorderSide(
+            color: isDark
+                ? const Color(0x33A78BFA)  // violet tint
+                : const Color(0xFFE2E8F0),
+            width: 0.5,
+          ),
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.25 : 0.07),
-            blurRadius: 24,
-            offset: const Offset(0, -6),
+            color: isDark
+                ? const Color(0x556366F1)  // indigo glow
+                : Colors.black.withOpacity(0.08),
+            blurRadius: 32,
+            offset: const Offset(0, -8),
           ),
         ],
       ),
       child: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
           child: Row(
             children: List.generate(tabs.length, (i) {
               final sel = currentIndex == i;
@@ -144,26 +153,43 @@ class _LuminaBottomNav extends StatelessWidget {
                   onTap: () => onTap(i),
                   behavior: HitTestBehavior.opaque,
                   child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 220),
+                    duration: const Duration(milliseconds: 250),
                     curve: Curves.easeOutCubic,
-                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    padding: const EdgeInsets.symmetric(vertical: 7),
                     child: Column(mainAxisSize: MainAxisSize.min, children: [
-                      // Icon with animated pill background
+                      // Icon with animated gradient pill
                       AnimatedContainer(
-                        duration: const Duration(milliseconds: 220),
+                        duration: const Duration(milliseconds: 250),
                         curve: Curves.easeOutCubic,
-                        padding: EdgeInsets.symmetric(horizontal: sel ? 12 : 6, vertical: 6),
+                        padding: EdgeInsets.symmetric(
+                          horizontal: sel ? 14 : 8, vertical: 6),
                         decoration: BoxDecoration(
-                          color: sel ? AppColors.indigo.withOpacity(0.15) : Colors.transparent,
-                          borderRadius: BorderRadius.circular(20),
+                          gradient: sel
+                              ? const LinearGradient(
+                                  colors: [AppColors.indigo, AppColors.violet],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                )
+                              : null,
+                          borderRadius: BorderRadius.circular(22),
+                          boxShadow: sel && isDark
+                              ? [const BoxShadow(
+                                  color: Color(0x556366F1),
+                                  blurRadius: 12,
+                                  offset: Offset(0, 2))]
+                              : null,
                         ),
                         child: AnimatedScale(
-                          scale: sel ? 1.1 : 1.0,
-                          duration: const Duration(milliseconds: 200),
+                          scale: sel ? 1.08 : 1.0,
+                          duration: const Duration(milliseconds: 220),
                           child: Icon(
                             sel ? tabs[i].activeIcon : tabs[i].icon,
-                            size: 22,
-                            color: sel ? AppColors.indigo : (isDark ? Colors.white.withOpacity(0.4) : const Color(0xFF94A3B8)),
+                            size: 21,
+                            color: sel
+                                ? Colors.white
+                                : (isDark
+                                    ? const Color(0xFF475569)
+                                    : const Color(0xFF94A3B8)),
                           ),
                         ),
                       ),
@@ -171,10 +197,14 @@ class _LuminaBottomNav extends StatelessWidget {
                       AnimatedDefaultTextStyle(
                         duration: const Duration(milliseconds: 200),
                         style: TextStyle(
-                          fontSize: sel ? 9.5 : 9.0,
+                          fontSize: 9.0,
                           fontWeight: sel ? FontWeight.w700 : FontWeight.w500,
-                          color: sel ? AppColors.indigo : (isDark ? const Color(0xFF475569) : const Color(0xFF94A3B8)),
-                          fontFamily: 'DMSans',
+                          color: sel
+                              ? AppColors.indigo
+                              : (isDark
+                                  ? const Color(0xFF334155)
+                                  : const Color(0xFF94A3B8)),
+                          fontFamily: 'Syne',
                         ),
                         child: Text(tabs[i].label),
                       ),
@@ -354,7 +384,6 @@ class _GroupsScreenState extends ConsumerState<GroupsScreen> {
       backgroundColor: Colors.transparent,
       builder: (sheetCtx) => StatefulBuilder(builder: (sheetCtx2, setSheet) {
         final cs = Theme.of(sheetCtx2).colorScheme;
-        final isDark = sheetCtx2.isDark;
         return Container(
           decoration: BoxDecoration(
             color: cs.surface,
@@ -586,15 +615,6 @@ class _AppBarBtn extends StatelessWidget {
   }
 }
 
-// ── Sticky sliver header ──────────────────────────────────────────────────────
-class _StickyHeader extends SliverPersistentHeaderDelegate {
-  final Widget child;
-  const _StickyHeader({required this.child});
-  @override Widget build(BuildContext ctx, double s, bool o) => child;
-  @override double get maxExtent => 60;
-  @override double get minExtent => 60;
-  @override bool shouldRebuild(_) => false;
-}
 
 // ── Filter chip ───────────────────────────────────────────────────────────────
 class _FilterChip extends StatelessWidget {
@@ -803,7 +823,6 @@ class _ActionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     return Expanded(child: GestureDetector(
       onTap: onTap,
       child: Container(

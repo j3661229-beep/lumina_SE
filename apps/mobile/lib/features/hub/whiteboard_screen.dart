@@ -14,12 +14,27 @@ class WhiteboardScreen extends StatefulWidget {
 class _WhiteboardScreenState extends State<WhiteboardScreen> {
   final _drawingController = DrawingController();
   final _supabase = Supabase.instance.client;
-  final _sessionId = DateTime.now().millisecondsSinceEpoch.toString();
+  RealtimeChannel? _channel;
 
   @override
   void initState() {
     super.initState();
+    _subscribeRealtime();
     _sendPresenceMessage();
+  }
+
+  void _subscribeRealtime() {
+    _channel = _supabase.channel('whiteboard_${widget.groupId}')
+      .onBroadcast(event: 'clear', callback: (payload) {
+        if (mounted) _drawingController.clear();
+      })
+      .onBroadcast(event: 'undo', callback: (payload) {
+        if (mounted) _drawingController.undo();
+      })
+      .onBroadcast(event: 'redo', callback: (payload) {
+        if (mounted) _drawingController.redo();
+      })
+      .subscribe();
   }
 
   Future<void> _sendPresenceMessage() async {
@@ -45,6 +60,7 @@ class _WhiteboardScreenState extends State<WhiteboardScreen> {
 
   @override
   void dispose() {
+    _channel?.unsubscribe();
     _drawingController.dispose();
     super.dispose();
   }
@@ -63,11 +79,25 @@ class _WhiteboardScreenState extends State<WhiteboardScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.undo_rounded),
-            onPressed: () => _drawingController.undo(),
+            onPressed: () {
+              _drawingController.undo();
+              _channel?.send(
+                type: RealtimeListenTypes.broadcast,
+                event: 'undo',
+                payload: {},
+              );
+            },
           ),
           IconButton(
             icon: const Icon(Icons.redo_rounded),
-            onPressed: () => _drawingController.redo(),
+            onPressed: () {
+              _drawingController.redo();
+              _channel?.send(
+                type: RealtimeListenTypes.broadcast,
+                event: 'redo',
+                payload: {},
+              );
+            },
           ),
           IconButton(
             icon: const Icon(Icons.delete_outline_rounded),
@@ -78,7 +108,15 @@ class _WhiteboardScreenState extends State<WhiteboardScreen> {
                 actions: [
                   TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
                   TextButton(
-                    onPressed: () { _drawingController.clear(); Navigator.pop(ctx); },
+                    onPressed: () {
+                      _drawingController.clear();
+                      _channel?.send(
+                        type: RealtimeListenTypes.broadcast,
+                        event: 'clear',
+                        payload: {},
+                      );
+                      Navigator.pop(ctx);
+                    },
                     child: const Text('Clear'),
                   ),
                 ],

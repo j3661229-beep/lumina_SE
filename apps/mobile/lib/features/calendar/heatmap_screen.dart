@@ -797,70 +797,124 @@ class _EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final isDark = context.isDark;
 
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 0, 12, 0),
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(28),
       decoration: AppStyles.glassCard(context),
       child: Column(children: [
+        // Gradient calendar icon with glow
         Container(
-          width: 72, height: 72,
+          width: 90, height: 90,
           decoration: BoxDecoration(
-            gradient: const LinearGradient(colors: [AppColors.indigo, Color(0xFF5C6BC0)]),
-            borderRadius: BorderRadius.circular(20),
+            gradient: const LinearGradient(
+              colors: [AppColors.indigo, AppColors.violet],
+              begin: Alignment.topLeft, end: Alignment.bottomRight),
+            borderRadius: BorderRadius.circular(26),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.indigo.withOpacity(isDark ? 0.5 : 0.3),
+                blurRadius: 28, offset: const Offset(0, 8))
+            ],
           ),
-          child: const Icon(Icons.email_rounded, color: Colors.white, size: 36),
+          child: const Icon(Icons.calendar_month_rounded, color: Colors.white, size: 44),
         ),
-        const SizedBox(height: 16),
-        Text('Connect Google', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
-        const SizedBox(height: 6),
+        const SizedBox(height: 20),
+        Text('Connect Google Calendar', style: TextStyle(
+          fontFamily: 'Syne', fontWeight: FontWeight.w800, fontSize: 20,
+          color: cs.onSurface)),
+        const SizedBox(height: 8),
         Text(
-          'Lumina scans Gmail for\n"deadline", "exam", "assignment"\nand auto-colors your calendar.',
+          'Lumina scans Gmail for "deadline", "exam", "assignment" and auto-colors your calendar — even offline.',
           textAlign: TextAlign.center,
           style: TextStyle(color: cs.outline, fontSize: 13, height: 1.6),
         ),
         const SizedBox(height: 20),
-        // Google-style button
-        SizedBox(width: double.infinity, child: ElevatedButton(
-          onPressed: onSync,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.surface(context),
-            foregroundColor: AppColors.textPrimary(context),
-            side: BorderSide(color: AppColors.border(context)),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            elevation: 0,
+        // Feature pills
+        Wrap(spacing: 8, runSpacing: 8, alignment: WrapAlignment.center, children: [
+          _EmpPill('📧 Gmail Auto-Sync', AppColors.indigo),
+          _EmpPill('📅 Smart Calendar', AppColors.green),
+          _EmpPill('⚡ Instant Stress View', AppColors.amber),
+        ]),
+        const SizedBox(height: 24),
+        // Primary Google Sign-in CTA
+        GestureDetector(
+          onTap: onSync,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            decoration: BoxDecoration(
+              color: isDark ? Colors.white.withOpacity(0.06) : Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: isDark ? Colors.white.withOpacity(0.15) : const Color(0xFFE2E8F0)),
+              boxShadow: isDark ? null : [
+                BoxShadow(color: Colors.black.withOpacity(0.06),
+                  blurRadius: 12, offset: const Offset(0, 2))],
+            ),
+            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              RichText(text: const TextSpan(
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+                children: [
+                  TextSpan(text: 'G', style: TextStyle(color: Color(0xFF4285F4))),
+                  TextSpan(text: 'o', style: TextStyle(color: Color(0xFFEA4335))),
+                  TextSpan(text: 'o', style: TextStyle(color: Color(0xFFFBBC05))),
+                  TextSpan(text: 'g', style: TextStyle(color: Color(0xFF4285F4))),
+                  TextSpan(text: 'l', style: TextStyle(color: Color(0xFF34A853))),
+                  TextSpan(text: 'e', style: TextStyle(color: Color(0xFFEA4335))),
+                ],
+              )),
+              const SizedBox(width: 10),
+              Text('Sign in with Google',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700, fontSize: 14,
+                  color: isDark ? Colors.white.withOpacity(0.85) : const Color(0xFF374151))),
+            ]),
           ),
-          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            // Google colors G
-            RichText(text: const TextSpan(
-              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
-              children: [
-                TextSpan(text: 'G', style: TextStyle(color: Color(0xFF4285F4))),
-                TextSpan(text: 'o', style: TextStyle(color: Color(0xFFEA4335))),
-                TextSpan(text: 'o', style: TextStyle(color: Color(0xFFFBBC05))),
-                TextSpan(text: 'g', style: TextStyle(color: Color(0xFF4285F4))),
-                TextSpan(text: 'l', style: TextStyle(color: Color(0xFF34A853))),
-                TextSpan(text: 'e', style: TextStyle(color: Color(0xFFEA4335))),
-              ],
-            )),
-            const SizedBox(width: 10),
-            Text('Sign in with Google', style: TextStyle(fontWeight: FontWeight.w600, color: AppColors.textPrimary(context))),
-          ]),
-        )),
-        const SizedBox(height: 10),
-        SizedBox(width: double.infinity, child: OutlinedButton.icon(
-          onPressed: onManual,
-          icon: const Icon(Icons.add_rounded),
-          label: const Text('Add deadline manually'),
-          style: OutlinedButton.styleFrom(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        ),
+        const SizedBox(height: 12),
+        // Secondary: manual add
+        GestureDetector(
+          onTap: onManual,
+          child: Container(
+            width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 12),
+            decoration: BoxDecoration(
+              color: AppColors.indigo.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.indigo.withOpacity(0.2)),
+            ),
+            child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              Icon(Icons.add_circle_outline_rounded, color: AppColors.indigo, size: 16),
+              SizedBox(width: 8),
+              Text('Add deadline manually',
+                style: TextStyle(
+                  color: AppColors.indigo, fontWeight: FontWeight.w600, fontSize: 13)),
+            ]),
           ),
-        )),
+        ),
       ]),
     );
   }
+}
+
+class _EmpPill extends StatelessWidget {
+  final String label;
+  final Color color;
+  const _EmpPill(this.label, this.color);
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+    decoration: BoxDecoration(
+      color: color.withOpacity(0.1),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: color.withOpacity(0.25)),
+    ),
+    child: Text(label, style: TextStyle(
+      color: color, fontSize: 11, fontWeight: FontWeight.w700)),
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
