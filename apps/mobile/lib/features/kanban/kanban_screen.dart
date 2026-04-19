@@ -343,8 +343,8 @@ class _KanbanScreenState extends ConsumerState<KanbanScreen> {
       body: _loading
         ? const KanbanShimmer()
         : ListView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.all(16),
+            scrollDirection: Axis.vertical,
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 100),
             children: KanbanCol.values.map((col) => _KanbanColumn(
               col: col,
               tasks: _tasks[col]!,
@@ -513,8 +513,8 @@ class _MyTasksKanbanScreenState extends ConsumerState<MyTasksKanbanScreen> {
                 textAlign: TextAlign.center),
             ]))
           : ListView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.all(16),
+              scrollDirection: Axis.vertical,
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 100),
               children: KanbanCol.values.map<Widget>((col) => _KanbanColumn(
                 col: col,
                 tasks: _tasks[col]!,
@@ -898,9 +898,9 @@ List<DropdownMenuItem<String>> _priorityItems() => [
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Column
+// Column  ── expandable accordion card
 // ─────────────────────────────────────────────────────────────────────────────
-class _KanbanColumn extends StatelessWidget {
+class _KanbanColumn extends StatefulWidget {
   final KanbanCol col;
   final List<Map<String, dynamic>> tasks;
   final void Function(Map<String, dynamic>) onDrop;
@@ -916,6 +916,13 @@ class _KanbanColumn extends StatelessWidget {
     this.onDelete,
     this.showGroupBadge = false,
   });
+
+  @override
+  State<_KanbanColumn> createState() => _KanbanColumnState();
+}
+
+class _KanbanColumnState extends State<_KanbanColumn>
+    with SingleTickerProviderStateMixin {
 
   static const _meta = {
     KanbanCol.backlog: (
@@ -940,99 +947,197 @@ class _KanbanColumn extends StatelessWidget {
     ),
   };
 
+  late bool _expanded;
+  late AnimationController _chevronCtrl;
+  late Animation<double> _chevronAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    // "In Progress" and "Done" start expanded; others collapsed
+    _expanded = widget.col == KanbanCol.doing || widget.col == KanbanCol.done;
+    _chevronCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 250),
+      value: _expanded ? 1.0 : 0.0,
+    );
+    _chevronAnim = CurvedAnimation(parent: _chevronCtrl, curve: Curves.easeInOut);
+  }
+
+  @override
+  void dispose() {
+    _chevronCtrl.dispose();
+    super.dispose();
+  }
+
+  void _toggle() {
+    HapticFeedback.selectionClick();
+    setState(() => _expanded = !_expanded);
+    if (_expanded) _chevronCtrl.forward(); else _chevronCtrl.reverse();
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final meta = _meta[col]!;
+    final meta = _meta[widget.col]!;
 
     return DragTarget<Map<String, dynamic>>(
-      onAcceptWithDetails: (d) => onDrop(d.data),
+      onAcceptWithDetails: (d) => widget.onDrop(d.data),
       builder: (ctx, candidates, _) => AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        width: 270,
-        margin: const EdgeInsets.only(right: 16),
+        margin: const EdgeInsets.only(bottom: 10),
         decoration: BoxDecoration(
           color: candidates.isNotEmpty
               ? meta.color.withOpacity(0.08)
-              : cs.surfaceContainerHighest.withOpacity(0.4),
-          borderRadius: BorderRadius.circular(20),
+              : cs.surfaceContainerHighest.withOpacity(0.38),
+          borderRadius: BorderRadius.circular(18),
           border: Border.all(
-            color: candidates.isNotEmpty ? meta.color : Colors.transparent,
-            width: 2,
+            color: candidates.isNotEmpty
+                ? meta.color
+                : _expanded
+                    ? meta.color.withOpacity(0.3)
+                    : Colors.transparent,
+            width: candidates.isNotEmpty ? 2 : 1.2,
           ),
         ),
-        child: Column(children: [
-          // Column header
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: meta.color.withOpacity(0.12),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
-            ),
-            child: Row(children: [
-              Icon(meta.icon, color: meta.color, size: 20),
-              const SizedBox(width: 8),
-              Expanded(child: Text(meta.label,
-                style: TextStyle(fontWeight: FontWeight.w800, color: meta.color, fontSize: 14))),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: meta.color,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text('${tasks.length}',
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 13)),
-              ),
-            ]),
-          ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
 
-          // Task list
-          Expanded(
-            child: tasks.isEmpty
-              ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-                  Icon(meta.icon, size: 36, color: meta.color.withOpacity(0.3)),
-                  const SizedBox(height: 8),
-                  Text('Drop here', style: TextStyle(color: meta.color.withOpacity(0.4), fontSize: 13)),
-                ]))
-              : ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 80),
-                  itemCount: tasks.length,
-                  itemBuilder: (ctx, i) => Draggable<Map<String, dynamic>>(
-                    data: tasks[i],
-                    onDragStarted: () => HapticFeedback.mediumImpact(),
-                    feedback: Material(
-                      elevation: 12,
-                      borderRadius: BorderRadius.circular(14),
-                      child: SizedBox(
-                        width: 250,
-                        child: _TaskCard(
-                          task: tasks[i],
-                          dragging: true,
-                          onDelete: null,
-                          onTap: () {},
-                          showGroupBadge: showGroupBadge,
-                        ),
-                      ),
-                    ),
-                    childWhenDragging: Opacity(
-                      opacity: 0.25,
-                      child: _TaskCard(
-                        task: tasks[i],
-                        onDelete: null,
-                        onTap: () {},
-                        showGroupBadge: showGroupBadge,
-                      ),
-                    ),
-                    child: _TaskCard(
-                      task: tasks[i],
-                      onDelete: onDelete != null ? () => onDelete!(tasks[i]) : null,
-                      onTap: () => onTap(tasks[i]),
-                      showGroupBadge: showGroupBadge,
-                    ),
+            // ── Tappable header ─────────────────────────────────────────
+            InkWell(
+              onTap: _toggle,
+              borderRadius: BorderRadius.vertical(
+                top: const Radius.circular(17),
+                bottom: _expanded ? Radius.zero : const Radius.circular(17),
+              ),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+                decoration: BoxDecoration(
+                  color: _expanded
+                      ? meta.color.withOpacity(0.14)
+                      : meta.color.withOpacity(0.07),
+                  borderRadius: BorderRadius.vertical(
+                    top: const Radius.circular(17),
+                    bottom: _expanded ? Radius.zero : const Radius.circular(17),
                   ),
                 ),
+                child: Row(children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: meta.color.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(meta.icon, color: meta.color, size: 16),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      meta.label,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        color: meta.color,
+                        fontSize: 14,
+                        fontFamily: 'Syne',
+                      ),
+                    ),
+                  ),
+                  // Task count badge
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: meta.color,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '${widget.tasks.length}',
+                      style: const TextStyle(
+                        color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12)),
+                  ),
+                  const SizedBox(width: 10),
+                  // Rotating chevron
+                  RotationTransition(
+                    turns: Tween(begin: 0.0, end: 0.5).animate(_chevronAnim),
+                    child: Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      color: meta.color.withOpacity(0.8),
+                      size: 22,
+                    ),
+                  ),
+                ]),
+              ),
+            ),
+
+            // ── Animated expandable task area ────────────────────────────
+            AnimatedSize(
+              duration: const Duration(milliseconds: 280),
+              curve: Curves.easeInOutCubic,
+              child: _expanded
+                  ? _buildTaskArea(cs, meta)
+                  : const SizedBox.shrink(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTaskArea(dynamic cs, dynamic meta) {
+    if (widget.tasks.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
+        child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Icon(meta.icon, size: 20, color: meta.color.withOpacity(0.3)),
+          const SizedBox(width: 8),
+          Text(
+            'No tasks yet — drag here or add one',
+            style: TextStyle(color: meta.color.withOpacity(0.45), fontSize: 12),
           ),
         ]),
+      );
+    }
+
+    // Vertical scrollable task list, capped at 3.5 cards tall
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxHeight: 300),
+      child: ListView.builder(
+        shrinkWrap: true,
+        padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+        itemCount: widget.tasks.length,
+        itemBuilder: (ctx, i) => Draggable<Map<String, dynamic>>(
+          data: widget.tasks[i],
+          onDragStarted: () => HapticFeedback.mediumImpact(),
+          feedback: Material(
+            elevation: 12,
+            borderRadius: BorderRadius.circular(14),
+            child: SizedBox(
+              width: 260,
+              child: _TaskCard(
+                task: widget.tasks[i],
+                dragging: true,
+                onDelete: null,
+                onTap: () {},
+                showGroupBadge: widget.showGroupBadge,
+              ),
+            ),
+          ),
+          childWhenDragging: Opacity(
+            opacity: 0.25,
+            child: _TaskCard(
+              task: widget.tasks[i],
+              onDelete: null,
+              onTap: () {},
+              showGroupBadge: widget.showGroupBadge,
+            ),
+          ),
+          child: _TaskCard(
+            task: widget.tasks[i],
+            onDelete: widget.onDelete != null ? () => widget.onDelete!(widget.tasks[i]) : null,
+            onTap: () => widget.onTap(widget.tasks[i]),
+            showGroupBadge: widget.showGroupBadge,
+          ),
+        ),
       ),
     );
   }
