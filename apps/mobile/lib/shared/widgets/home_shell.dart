@@ -16,6 +16,7 @@ class HomeShell extends ConsumerWidget {
     (icon: Icons.event_note_outlined, activeIcon: Icons.event_note_rounded, label: 'Calendar', path: '/calendar'),
     (icon: Icons.people_outline_rounded, activeIcon: Icons.people_rounded, label: 'Groups', path: '/groups'),
     (icon: Icons.account_balance_wallet_outlined, activeIcon: Icons.account_balance_wallet_rounded, label: 'Finance', path: '/expenses'),
+    (icon: Icons.psychology_outlined, activeIcon: Icons.psychology_rounded, label: 'Focus', path: '/flow'),
     (icon: Icons.auto_stories_outlined, activeIcon: Icons.auto_stories_rounded, label: 'Brain', path: '/rag'),
   ];
 

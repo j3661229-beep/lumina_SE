@@ -58,6 +58,20 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2"/>
+
+        <!-- ─── Focus Block Accessibility Service ─── -->
+        <service
+            android:name=".LuminaBlockService"
+            android:exported="true"
+            android:label="Lumina Focus Block"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config"/>
+        </service>
     </application>
 
     <!-- Queries for intent (needed for file pickers on API 30+) -->

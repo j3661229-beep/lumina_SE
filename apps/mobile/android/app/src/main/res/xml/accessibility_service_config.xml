@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Lumina Focus Block — Accessibility Service config
+  Listens for window state changes (foreground app changes) only.
+  No need to observe content or retrieve window info.
+-->
+<accessibility-service
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/accessibility_service_description"
+    android:accessibilityEventTypes="typeWindowStateChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:notificationTimeout="50"
+    android:canRetrieveWindowContent="false"
+    android:settingsActivity="com.lumina.lumina.MainActivity" />

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Lumina</string>
+    <string name="accessibility_service_description">Lumina Focus Mode: blocks distracting apps you selected so you can study without interruptions. Only checks the app name when you open something — no data is collected.</string>
+</resources>
