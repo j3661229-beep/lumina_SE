@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 import 'vector_store.dart';
-import 'gemini_rag_service.dart';
+import 'gemini_rag_service.dart'; // kept for synthesise()
 
 // ── State ─────────────────────────────────────────────────────────────────────
 class RagState {
@@ -63,14 +63,11 @@ class RagNotifier extends AsyncNotifier<RagState> {
     if (result == null || result.files.isEmpty) return;
 
     final file = result.files.first;
-    final online = await GeminiRagService.instance.isOnline();
 
     state = AsyncData(state.value!.copyWith(
       isIndexing: true,
       indexProgress: 0,
-      indexingStatus: online
-          ? 'Extracting text…'
-          : 'Offline — using fast local embeddings…',
+      indexingStatus: '📄 Extracting text from ${file.name}…',
     ));
 
     try {
@@ -79,7 +76,6 @@ class RagNotifier extends AsyncNotifier<RagState> {
       if (file.extension?.toLowerCase() == 'pdf') {
         rawText = await _extractPdfText(file.path ?? '');
       } else {
-        // Plain text
         rawText = File(file.path!).readAsStringSync();
       }
 
@@ -91,16 +87,26 @@ class RagNotifier extends AsyncNotifier<RagState> {
         return;
       }
 
-      // ── Chunk text (sliding window, ~400 chars with 80-char overlap) ──────
+      // ── Chunk text ──────────────────────────────────────────────────────
       final chunks = _chunkText(rawText, chunkSize: 400, overlap: 80);
       debugPrint('[RAG] ${file.name}: ${rawText.length} chars → ${chunks.length} chunks');
 
-      state = AsyncData(state.value!.copyWith(indexingStatus: 'Generating embeddings (${chunks.length} chunks)…'));
+      if (chunks.isEmpty) {
+        state = AsyncData(state.value!.copyWith(
+          isIndexing: false,
+          indexingStatus: '⚠️ Document produced no usable text chunks.',
+        ));
+        return;
+      }
 
-      // ── Index in VectorStore with progress updates ────────────────────────
-      final docId = '${file.name}_${DateTime.now().millisecondsSinceEpoch}';
+      state = AsyncData(state.value!.copyWith(
+        indexingStatus: '⚡ Embedding ${chunks.length} chunks on-device…',
+      ));
 
-      // Override addChunks to report progress
+      // Use filename as deterministic docId so re-uploads replace old chunks
+      final docId = file.name;
+      // Always delete old chunks for this file first (prevents mixed-vector accumulation)
+      await VectorStore.instance.deleteDoc(docId);
       await _indexWithProgress(docId, file.name, chunks, file.extension ?? 'doc');
 
       state = AsyncData(await _buildState());
@@ -115,9 +121,7 @@ class RagNotifier extends AsyncNotifier<RagState> {
 
   Future<void> _indexWithProgress(
     String docId, String docTitle, List<String> chunks, String docType) async {
-    // Use the public VectorStore API — it handles embedding internally
     for (int i = 0; i < chunks.length; i += 10) {
-      // Process in batches of 10 for progress reporting
       final end = (i + 10).clamp(0, chunks.length);
       final batch = chunks.sublist(i, end);
 
@@ -127,7 +131,7 @@ class RagNotifier extends AsyncNotifier<RagState> {
       state = AsyncData(state.value!.copyWith(
         isIndexing: true,
         indexProgress: progress,
-        indexingStatus: 'Embedding chunk $end/${chunks.length}…',
+        indexingStatus: '⚡ Indexed $end / ${chunks.length} chunks…',
       ));
     }
   }
@@ -138,10 +142,18 @@ class RagNotifier extends AsyncNotifier<RagState> {
     state = AsyncData(await _buildState());
   }
 
-  // ── Semantic search → Gemini synthesis ───────────────────────────────────
+  // ── Clear everything (use after embedding schema changes) ─────────────────
+  Future<void> clearAllDocs() async {
+    await VectorStore.instance.clearAll();
+    state = AsyncData(await _buildState());
+  }
+
+  // ── Semantic search → synthesis ───────────────────────────────────────────
   Future<String> query(String q) async {
     final chunks = await VectorStore.instance.search(q, topK: 5);
-    if (chunks.isEmpty) return 'No relevant content found in your documents. Try uploading some PDFs first.';
+    if (chunks.isEmpty) {
+      return 'No relevant content found in your documents. Try uploading some PDFs first.';
+    }
     final texts = chunks.map((c) => c.chunkText).toList();
     return await GeminiRagService.instance.synthesise(q, texts);
   }
@@ -172,38 +184,41 @@ class RagNotifier extends AsyncNotifier<RagState> {
     }
   }
 
-  // ── Sliding window text chunker ───────────────────────────────────────────
+  // ── Chunker ────────────────────────────────────────────────────────────────
+  // Root issue: Syncfusion extracts PDFs with single \n for line-wraps (no blank lines).
+  // Attempting to split on \n\n produces only 1-2 "paragraphs" = 2 huge chunks.
+  // Fix: ALWAYS flatten ALL newlines into spaces → single clean line → slide window.
   static List<String> _chunkText(String text, {int chunkSize = 400, int overlap = 80}) {
-    // First split by paragraphs for better context
-    final paras = text.split(RegExp(r'\n\s*\n')).where((p) => p.trim().length > 20).toList();
+    // Flatten: PDF \n = line-wrap (not paragraph). Collapse everything to spaces.
+    final flat = text
+        .replaceAll('\r\n', '\n')
+        .replaceAll('\r', '\n')
+        .replaceAll('\n', ' ')            // ALL newlines → space
+        .replaceAll(RegExp(r'\s+'), ' ')  // collapse whitespace runs
+        .trim();
 
+    debugPrint('[RAG] Flattened to ${flat.length} chars');
+    if (flat.length <= 30) return [];
+
+    return _charSlidingWindow(flat, chunkSize, overlap);
+  }
+
+  // Character sliding window that snaps to word boundaries
+  static List<String> _charSlidingWindow(String text, int size, int overlap) {
     final chunks = <String>[];
-    final buffer = StringBuffer();
-
-    for (final para in paras) {
-      final cleaned = para.trim().replaceAll(RegExp(r'\s+'), ' ');
-      if (buffer.length + cleaned.length < chunkSize) {
-        buffer.write('$cleaned ');
-      } else {
-        if (buffer.isNotEmpty) {
-          chunks.add(buffer.toString().trim());
-        }
-        // Handle paragraphs longer than chunkSize
-        if (cleaned.length > chunkSize) {
-          for (int i = 0; i < cleaned.length; i += (chunkSize - overlap)) {
-            final end = (i + chunkSize).clamp(0, cleaned.length);
-            chunks.add(cleaned.substring(i, end));
-            if (end >= cleaned.length) break;
-          }
-          buffer.clear();
-        } else {
-          buffer.clear();
-          buffer.write('$cleaned ');
-        }
+    int i = 0;
+    while (i < text.length) {
+      int end = (i + size).clamp(0, text.length);
+      // Snap forward to next word boundary so we don't cut mid-word
+      if (end < text.length) {
+        final spaceAfter = text.indexOf(' ', end);
+        if (spaceAfter != -1 && spaceAfter - end < 60) end = spaceAfter;
       }
+      final chunk = text.substring(i, end).trim();
+      if (chunk.length > 30) chunks.add(chunk);
+      if (end >= text.length) break;
+      i += size - overlap;
     }
-    if (buffer.isNotEmpty) chunks.add(buffer.toString().trim());
-
-    return chunks.where((c) => c.length > 30).toList();
+    return chunks;
   }
 }

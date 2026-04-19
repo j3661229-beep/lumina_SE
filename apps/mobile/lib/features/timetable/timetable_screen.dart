@@ -138,10 +138,15 @@ class _TimetableScreenState extends ConsumerState<TimetableScreen> {
 
           final todayKey = DateFormat('EEEE').format(now).toLowerCase();
           final todaySlots = grouped[todayKey] ?? [];
+          final todayStr = DateFormat('yyyy-MM-dd').format(now);
 
           final analytics = ref.watch(bunkAnalyticsProvider).value ?? [];
           final items = analytics.map((e) => e as Map<String, dynamic>).toList();
           
+          // ── Holidays ──────────────────────────────────────────────
+          final holidays = ref.watch(holidaysProvider).value ?? {};
+          final todayHoliday = holidays[todayStr];
+
           double avgPct = 0;
           int bunksLeft = 0;
           
@@ -156,7 +161,7 @@ class _TimetableScreenState extends ConsumerState<TimetableScreen> {
               // ── Premium glass header ──────────────────────────────────
               _Header(
                 todayLabel: todayLabel,
-                classesToday: todaySlots.length,
+                classesToday: todayHoliday != null ? 0 : todaySlots.length,
                 avgAttendance: avgPct,
                 bunksLeft: bunksLeft,
                 hasSlots: slots.isNotEmpty,
@@ -168,12 +173,40 @@ class _TimetableScreenState extends ConsumerState<TimetableScreen> {
               // ── Semester Progress Banner ──────────────────────────────
               if (slots.isNotEmpty) _SemesterProgressBanner(),
 
+              // ── Holiday banner for today ──────────────────────────────
+              if (todayHoliday != null)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [AppColors.amber.withOpacity(0.15), AppColors.orange.withOpacity(0.08)],
+                        begin: Alignment.topLeft, end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: AppColors.amber.withOpacity(0.3)),
+                    ),
+                    child: Row(children: [
+                      const Text('🎉', style: TextStyle(fontSize: 24)),
+                      const SizedBox(width: 12),
+                      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text('Holiday Today!', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: AppColors.amber, fontFamily: 'Syne')),
+                        Text(todayHoliday, style: TextStyle(fontSize: 12, color: AppColors.amber.withOpacity(0.8))),
+                      ])),
+                    ]),
+                  ),
+                ),
+
               // ── Main Content Area ──────────────────────────────────────
               Expanded(
                 child: RefreshIndicator(
                   color: AppColors.indigo,
                   backgroundColor: Theme.of(context).colorScheme.surface,
-                  onRefresh: () async => ref.invalidate(timetableProvider),
+                  onRefresh: () async {
+                    ref.invalidate(timetableProvider);
+                    ref.invalidate(holidaysProvider);
+                  },
                   child: slots.isEmpty
                     ? ListView(padding: const EdgeInsets.all(18), children: [_EmptyTimetable(onScan: () => context.go('/ocr'))])
                     : CustomScrollView(
@@ -189,7 +222,12 @@ class _TimetableScreenState extends ConsumerState<TimetableScreen> {
                                   color: Theme.of(context).colorScheme.onSurface)),
                             ),
                           ),
-                          if (todaySlots.isEmpty)
+                          if (todayHoliday != null)
+                            SliverPadding(
+                              padding: const EdgeInsets.symmetric(horizontal: 18),
+                              sliver: SliverToBoxAdapter(child: _HolidayTimelineCard(name: todayHoliday)),
+                            )
+                          else if (todaySlots.isEmpty)
                             SliverPadding(
                               padding: const EdgeInsets.symmetric(horizontal: 18),
                               sliver: SliverToBoxAdapter(child: _FreeDayCard()),
@@ -234,6 +272,7 @@ class _TimetableScreenState extends ConsumerState<TimetableScreen> {
                                     dayAbbr: _days[i],
                                     dayFull: day,
                                     slots: grouped[day] ?? [],
+                                    holidays: holidays,
                                   );
                                 },
                                 childCount: _daysFull.length,
@@ -690,42 +729,69 @@ class _ActionBtn extends StatelessWidget {
 class _DaySummaryCard extends ConsumerWidget {
   final String dayAbbr, dayFull;
   final List<dynamic> slots;
-  const _DaySummaryCard({required this.dayAbbr, required this.dayFull, required this.slots});
+  final Map<String, String> holidays;
+  const _DaySummaryCard({
+    required this.dayAbbr,
+    required this.dayFull,
+    required this.slots,
+    this.holidays = const {},
+  });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => Container(
-    margin: const EdgeInsets.only(bottom: 12),
-    decoration: AppStyles.glassCard(context),
-    child: InkWell(
-      onTap: () => _showDayDetail(context, ref, dayFull, slots),
-      borderRadius: BorderRadius.circular(16),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(children: [
-          Container(
-            width: 45, height: 45,
-            decoration: BoxDecoration(color: AppColors.indigo.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
-            child: Center(child: Text(dayAbbr, style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.indigo, fontFamily: 'Syne'))),
-          ),
-          const SizedBox(width: 16),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(dayFull[0].toUpperCase() + dayFull.substring(1), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-            Text('${slots.length} classes scheduled', style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5))),
-          ])),
-          Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.3)),
-        ]),
-      ),
-    ),
-  );
-
-  void _showDayDetail(BuildContext context, WidgetRef ref, String day, List<dynamic> daySlots) {
-    // Calculate the date for this day in the current week
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Find if any upcoming date for this day of the week is a holiday
     final now = DateTime.now();
-    final dayIndex = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'].indexOf(day.toLowerCase());
-    final currentDayIndex = now.weekday - 1; // 0 = Monday
+    final dayIndex = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'].indexOf(dayFull.toLowerCase());
+    final currentDayIndex = now.weekday - 1;
     final dateForDay = now.add(Duration(days: dayIndex - currentDayIndex));
     final dateStr = DateFormat('yyyy-MM-dd').format(dateForDay);
+    final holidayName = holidays[dateStr];
 
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: AppStyles.glassCard(context),
+      child: InkWell(
+        onTap: () => _showDayDetail(context, ref, dayFull, slots, dateStr, holidayName),
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(children: [
+            Container(
+              width: 45, height: 45,
+              decoration: BoxDecoration(
+                color: holidayName != null
+                    ? AppColors.amber.withOpacity(0.12)
+                    : AppColors.indigo.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Center(child: Text(
+                holidayName != null ? '🎉' : dayAbbr,
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  color: holidayName != null ? AppColors.amber : AppColors.indigo,
+                  fontFamily: 'Syne',
+                ),
+              )),
+            ),
+            const SizedBox(width: 16),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(dayFull[0].toUpperCase() + dayFull.substring(1),
+                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+              if (holidayName != null)
+                Text('🎉 $holidayName', style: TextStyle(fontSize: 12, color: AppColors.amber.withOpacity(0.9), fontWeight: FontWeight.w600))
+              else
+                Text('${slots.length} classes scheduled',
+                  style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5))),
+            ])),
+            Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.3)),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  void _showDayDetail(BuildContext context, WidgetRef ref, String day, List<dynamic> daySlots, String dateStr, String? holidayName) {
+    final dateForDay = DateTime.parse(dateStr);
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -745,10 +811,30 @@ class _DaySummaryCard extends ConsumerWidget {
             ]),
             IconButton(onPressed: () => Navigator.pop(ctx), icon: const Icon(Icons.close)),
           ]),
-          const SizedBox(height: 20),
+          if (holidayName != null)
+            Container(
+              margin: const EdgeInsets.symmetric(vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: AppColors.amber.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: AppColors.amber.withOpacity(0.3)),
+              ),
+              child: Row(children: [
+                const Text('🎉', style: TextStyle(fontSize: 20)),
+                const SizedBox(width: 12),
+                Text('$holidayName — No classes!', style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.amber)),
+              ]),
+            )
+          else
+            const SizedBox(height: 20),
           Expanded(
-            child: daySlots.isEmpty 
-              ? const Center(child: Text('No classes this day!'))
+            child: daySlots.isEmpty
+              ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  const Text('✌️', style: TextStyle(fontSize: 36)),
+                  const SizedBox(height: 8),
+                  const Text('No classes this day!', style: TextStyle(fontWeight: FontWeight.w700)),
+                ]))
               : ListView.builder(
                   itemCount: daySlots.length,
                   itemBuilder: (ctx, i) {
@@ -771,10 +857,38 @@ class _FreeDayCard extends StatelessWidget {
     padding: const EdgeInsets.all(30),
     decoration: AppStyles.glassCard(context),
     child: Column(children: [
-      const Text('🎉', style: TextStyle(fontSize: 40)),
+      const Text('✌️', style: TextStyle(fontSize: 40)),
       const SizedBox(height: 12),
       const Text('Free day!', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18, fontFamily: 'Syne')),
-      Text('No classes scheduled for today. Time to relax or study!', textAlign: TextAlign.center, style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5))),
+      Text('No classes scheduled for today. Time to relax or study!',
+        textAlign: TextAlign.center, style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5))),
+    ]),
+  );
+}
+
+class _HolidayTimelineCard extends StatelessWidget {
+  final String name;
+  const _HolidayTimelineCard({required this.name});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(30),
+    decoration: BoxDecoration(
+      gradient: LinearGradient(
+        colors: [AppColors.amber.withOpacity(0.12), AppColors.orange.withOpacity(0.06)],
+        begin: Alignment.topLeft, end: Alignment.bottomRight,
+      ),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: AppColors.amber.withOpacity(0.3)),
+    ),
+    child: Column(children: [
+      const Text('🎉', style: TextStyle(fontSize: 48)),
+      const SizedBox(height: 12),
+      Text(name, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 20, color: AppColors.amber, fontFamily: 'Syne'), textAlign: TextAlign.center),
+      const SizedBox(height: 6),
+      Text('No classes today — enjoy the break!',
+        textAlign: TextAlign.center,
+        style: TextStyle(fontSize: 13, color: AppColors.amber.withOpacity(0.75))),
     ]),
   );
 }

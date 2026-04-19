@@ -1,8 +1,42 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/theme/design_tokens.dart';
 import 'rag_provider.dart';
+
+// ── Persistent chat message model ────────────────────────────────────────────
+class _ChatMessage {
+  final String text;
+  final bool isUser;
+  final bool isError;
+  final DateTime timestamp;
+
+  const _ChatMessage({
+    required this.text,
+    required this.isUser,
+    this.isError = false,
+    required this.timestamp,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'text': text,
+    'isUser': isUser,
+    'isError': isError,
+    'ts': timestamp.millisecondsSinceEpoch,
+  };
+
+  factory _ChatMessage.fromJson(Map<String, dynamic> j) => _ChatMessage(
+    text: j['text'] as String,
+    isUser: j['isUser'] as bool,
+    isError: (j['isError'] as bool?) ?? false,
+    timestamp: DateTime.fromMillisecondsSinceEpoch(j['ts'] as int),
+  );
+}
+
+const _kChatKey = 'rag_chat_v3'; // bumped: clears old *(Offline Mode)* cached messages
+const _kMaxSaved = 100;
 
 class RagScreen extends ConsumerStatefulWidget {
   const RagScreen({super.key});
@@ -17,10 +51,10 @@ class _RagScreenState extends ConsumerState<RagScreen>
   late final AnimationController _pulseCtrl;
   late final Animation<double> _pulse;
 
-  // Chat history
   final List<_ChatMessage> _messages = [];
   bool _isQuerying = false;
   bool _showDocs = false;
+  bool _chatLoaded = false;
 
   @override
   void initState() {
@@ -29,6 +63,7 @@ class _RagScreenState extends ConsumerState<RagScreen>
       ..repeat(reverse: true);
     _pulse = Tween<double>(begin: 0.6, end: 1.0)
         .animate(CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut));
+    _loadChatHistory();
   }
 
   @override
@@ -39,29 +74,74 @@ class _RagScreenState extends ConsumerState<RagScreen>
     super.dispose();
   }
 
+  // ── Local persistence ─────────────────────────────────────────────────────
+  Future<void> _loadChatHistory() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_kChatKey);
+    if (raw != null) {
+      try {
+        final list = (jsonDecode(raw) as List)
+            .map((e) => _ChatMessage.fromJson(e as Map<String, dynamic>))
+            .toList();
+        if (mounted) {
+          setState(() {
+            _messages.addAll(list);
+            _chatLoaded = true;
+          });
+          WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+        }
+      } catch (_) {
+        // Corrupt or incompatible cache — wipe it
+        await prefs.remove(_kChatKey);
+        if (mounted) setState(() => _chatLoaded = true);
+      }
+    } else {
+      if (mounted) setState(() => _chatLoaded = true);
+    }
+  }
+
+  Future<void> _saveChatHistory() async {
+    final prefs = await SharedPreferences.getInstance();
+    // Only keep last _kMaxSaved messages
+    final toSave = _messages.length > _kMaxSaved
+        ? _messages.sublist(_messages.length - _kMaxSaved)
+        : _messages;
+    await prefs.setString(_kChatKey, jsonEncode(toSave.map((m) => m.toJson()).toList()));
+  }
+
+  Future<void> _clearChat() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_kChatKey);
+    setState(() => _messages.clear());
+  }
+
   Future<void> _ask() async {
     final q = _queryCtrl.text.trim();
     if (q.isEmpty || _isQuerying) return;
     HapticFeedback.mediumImpact();
     _queryCtrl.clear();
     setState(() {
-      _messages.add(_ChatMessage(text: q, isUser: true));
+      _messages.add(_ChatMessage(text: q, isUser: true, timestamp: DateTime.now()));
       _isQuerying = true;
     });
     _scrollToBottom();
     try {
       final answer = await ref.read(ragProvider.notifier).query(q);
+      debugPrint('[RAG Screen] Answer: $answer');
       setState(() {
-        _messages.add(_ChatMessage(text: answer, isUser: false));
+        _messages.add(_ChatMessage(text: answer, isUser: false, timestamp: DateTime.now()));
         _isQuerying = false;
       });
     } catch (e) {
+      debugPrint('[RAG Screen] Query error: $e');
       setState(() {
-        _messages.add(_ChatMessage(text: '⚠️ Error: $e', isUser: false, isError: true));
+        _messages.add(_ChatMessage(
+          text: '⚠️ Error: $e', isUser: false, isError: true, timestamp: DateTime.now()));
         _isQuerying = false;
       });
     }
     _scrollToBottom();
+    _saveChatHistory();
   }
 
   void _scrollToBottom() {
@@ -117,8 +197,19 @@ class _RagScreenState extends ConsumerState<RagScreen>
                         ),
                       ),
                       const SizedBox(width: 6),
-                      Text('Offline AI · ${s.docs.length} docs · ${s.totalChunks} chunks',
-                        style: TextStyle(color: cs.onSurface.withOpacity(0.45), fontSize: 11)),
+                      Flexible(
+                        child: Text(
+                          s.isIndexing
+                              ? s.indexingStatus ?? 'Indexing…'
+                              : 'Offline AI · ${s.docs.length} docs · ${s.totalChunks} chunks',
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: s.isIndexing ? AppColors.indigo : cs.onSurface.withOpacity(0.45),
+                            fontSize: 11,
+                            fontWeight: s.isIndexing ? FontWeight.w700 : FontWeight.normal,
+                          ),
+                        ),
+                      ),
                     ]),
                   ),
                 ])),
@@ -134,26 +225,50 @@ class _RagScreenState extends ConsumerState<RagScreen>
                   _NavBtn(
                     icon: Icons.cleaning_services_outlined,
                     active: false,
-                    onTap: () => setState(() => _messages.clear()),
+                    onTap: () => showDialog(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        backgroundColor: cs.surface,
+                        title: const Text('Clear chat history?', style: TextStyle(fontFamily: 'Syne', fontWeight: FontWeight.w700, fontSize: 16)),
+                        content: const Text('This will delete all saved messages permanently.'),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+                          TextButton(
+                            onPressed: () { Navigator.pop(ctx); _clearChat(); },
+                            child: const Text('Clear', style: TextStyle(color: AppColors.rose)),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
               ]),
             ),
           ),
         ),
 
+        // ── Indexing overlay (shown even when docs list is empty) ───────────
+        ragAsync.maybeWhen(
+          data: (s) => s.isIndexing
+              ? _IndexingProgressBar(
+                  status: s.indexingStatus ?? 'Indexing…',
+                  progress: s.indexProgress,
+                )
+              : const SizedBox(),
+          orElse: () => const SizedBox(),
+        ),
+
         // ── Documents shelf ─────────────────────────────────────────────────
         if (_showDocs)
           ragAsync.maybeWhen(
-            data: (s) => s.docs.isEmpty
+            data: (s) => s.docs.isEmpty && !s.isIndexing
                 ? _EmptyDocsBar(onUpload: () => ref.read(ragProvider.notifier).pickAndIndex())
-                : _DocsShelf(
-                    docs: s.docs,
-                    isIndexing: s.isIndexing,
-                    progress: s.indexProgress,
-                    statusText: s.indexingStatus,
-                    onDelete: (id) => ref.read(ragProvider.notifier).deleteDoc(id),
-                    onAdd: () => ref.read(ragProvider.notifier).pickAndIndex(),
-                  ),
+                : s.docs.isEmpty
+                    ? const SizedBox() // indexing in progress, progress bar already shown above
+                    : _DocsShelf(
+                        docs: s.docs,
+                        onDelete: (id) => ref.read(ragProvider.notifier).deleteDoc(id),
+                        onAdd: () => ref.read(ragProvider.notifier).pickAndIndex(),
+                      ),
             orElse: () => const SizedBox(),
           ),
 
@@ -162,20 +277,22 @@ class _RagScreenState extends ConsumerState<RagScreen>
 
         // ── Chat area ──────────────────────────────────────────────────────
         Expanded(
-          child: ragAsync.maybeWhen(
-            data: (s) => s.docs.isEmpty && _messages.isEmpty
-                ? _EmptyState(onUpload: () => ref.read(ragProvider.notifier).pickAndIndex())
-                : _ChatArea(
-                    messages: _messages,
-                    isQuerying: _isQuerying,
-                    scrollCtrl: _scrollCtrl,
-                  ),
-            orElse: () => const Center(child: CircularProgressIndicator(color: AppColors.indigo)),
-          ),
+          child: !_chatLoaded
+              ? const Center(child: CircularProgressIndicator(color: AppColors.indigo))
+              : ragAsync.maybeWhen(
+                  data: (s) => s.docs.isEmpty && _messages.isEmpty
+                      ? _EmptyState(onUpload: () => ref.read(ragProvider.notifier).pickAndIndex())
+                      : _ChatArea(
+                          messages: _messages,
+                          isQuerying: _isQuerying,
+                          scrollCtrl: _scrollCtrl,
+                        ),
+                  orElse: () => const Center(child: CircularProgressIndicator(color: AppColors.indigo)),
+                ),
         ),
 
         // ── Suggestions ─────────────────────────────────────────────────────
-        if (_messages.isEmpty)
+        if (_messages.isEmpty && _chatLoaded)
           _Suggestions(onTap: (s) {
             _queryCtrl.text = s;
             _ask();
@@ -193,13 +310,63 @@ class _RagScreenState extends ConsumerState<RagScreen>
   }
 }
 
-// ── Chat message model ────────────────────────────────────────────────────────
-class _ChatMessage {
-  final String text;
-  final bool isUser;
-  final bool isError;
-  const _ChatMessage({required this.text, required this.isUser, this.isError = false});
+// ── Indexing progress bar (always visible during upload) ──────────────────────
+class _IndexingProgressBar extends StatelessWidget {
+  final String status;
+  final double progress;
+  const _IndexingProgressBar({required this.status, required this.progress});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.indigo.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.indigo.withOpacity(0.2)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          SizedBox(
+            width: 14, height: 14,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: AppColors.indigo,
+              value: progress > 0 ? progress : null,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              status,
+              style: const TextStyle(
+                color: AppColors.indigo, fontSize: 12, fontWeight: FontWeight.w600),
+            ),
+          ),
+          if (progress > 0)
+            Text('${(progress * 100).round()}%',
+              style: const TextStyle(color: AppColors.indigo, fontSize: 12, fontWeight: FontWeight.w800)),
+        ]),
+        if (progress > 0) ...[
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: progress,
+              color: AppColors.indigo,
+              backgroundColor: AppColors.indigo.withOpacity(0.1),
+              minHeight: 4,
+            ),
+          ),
+        ],
+      ]),
+    );
+  }
 }
+
+// ── Chat message model ────────────────────────────────────────────────────────
+// (defined at top of file)
 
 // ── Chat area ─────────────────────────────────────────────────────────────────
 class _ChatArea extends StatelessWidget {
@@ -210,7 +377,6 @@ class _ChatArea extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     final isDark = context.isDark;
     return ListView.builder(
       controller: scrollCtrl,
@@ -239,7 +405,7 @@ class _ChatArea extends StatelessWidget {
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: AppColors.indigo.withOpacity(isDark ? 0.3 : 0.15), 
+                    color: AppColors.indigo.withOpacity(isDark ? 0.3 : 0.15),
                     blurRadius: 12, offset: const Offset(0, 4)
                   )
                 ],
@@ -278,8 +444,13 @@ class _ChatArea extends StatelessWidget {
                     child: const Icon(Icons.auto_awesome, size: 11, color: Colors.white),
                   ),
                   const SizedBox(width: 7),
-                  Text('Lumina AI', style: TextStyle(
+                  Text('Lumina AI', style: const TextStyle(
                     color: AppColors.indigo, fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.5)),
+                  const Spacer(),
+                  Text(
+                    _fmtTime(msg.timestamp),
+                    style: TextStyle(fontSize: 9, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.35)),
+                  ),
                 ]),
               if (!msg.isError) const SizedBox(height: 10),
               SelectableText(msg.text, style: TextStyle(
@@ -289,6 +460,12 @@ class _ChatArea extends StatelessWidget {
         );
       },
     );
+  }
+
+  static String _fmtTime(DateTime dt) {
+    final h = dt.hour.toString().padLeft(2, '0');
+    final m = dt.minute.toString().padLeft(2, '0');
+    return '$h:$m';
   }
 }
 
@@ -314,7 +491,6 @@ class _ThinkingBubbleState extends State<_ThinkingBubble> with SingleTickerProvi
 
   @override
   Widget build(BuildContext context) {
-    final isDark = context.isDark;
     return Align(
       alignment: Alignment.centerLeft,
       child: Container(
@@ -440,18 +616,17 @@ class _InputBar extends StatelessWidget {
             duration: const Duration(milliseconds: 200),
             width: 44, height: 44,
             decoration: BoxDecoration(
-              gradient: isQuerying ? null : const LinearGradient(
-                colors: [AppColors.indigo, AppColors.violet],
-                begin: Alignment.topLeft, end: Alignment.bottomRight,
-              ),
-              color: isQuerying ? cs.onSurface.withOpacity(0.08) : null,
+              gradient: isQuerying
+                  ? null
+                  : const LinearGradient(colors: [AppColors.indigo, AppColors.violet]),
+              color: isQuerying ? cs.onSurface.withOpacity(0.1) : null,
               borderRadius: BorderRadius.circular(22),
-              boxShadow: isQuerying ? [] : [const BoxShadow(color: Color(0x506366F1), blurRadius: 12, offset: Offset(0, 4))],
             ),
-            child: isQuerying
-                ? const Center(child: SizedBox(width: 18, height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.indigo)))
-                : const Icon(Icons.send_rounded, size: 18, color: Colors.white),
+            child: Icon(
+              isQuerying ? Icons.hourglass_empty_rounded : Icons.send_rounded,
+              color: isQuerying ? cs.onSurface.withOpacity(0.3) : Colors.white,
+              size: 18,
+            ),
           ),
         ),
       ]),
@@ -504,41 +679,23 @@ class _NavBtn extends StatelessWidget {
 // ── Docs shelf ────────────────────────────────────────────────────────────────
 class _DocsShelf extends StatelessWidget {
   final List docs;
-  final bool isIndexing;
-  final double? progress;
-  final String? statusText;
   final ValueChanged<String> onDelete;
   final VoidCallback onAdd;
-  const _DocsShelf({required this.docs, required this.isIndexing, this.progress, this.statusText, required this.onDelete, required this.onAdd});
+  const _DocsShelf({required this.docs, required this.onDelete, required this.onAdd});
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      if (isIndexing)
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(statusText ?? 'Indexing…', style: TextStyle(color: cs.onSurface.withOpacity(0.5), fontSize: 11)),
-            const SizedBox(height: 6),
-            ClipRRect(borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(value: progress, color: AppColors.indigo,
-                backgroundColor: AppColors.indigo.withOpacity(0.1), minHeight: 4)),
-            const SizedBox(height: 6),
-          ]),
-        ),
-      SizedBox(
-        height: 130,
-        child: ListView(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          children: [
-            ...docs.map((doc) => _DocCard(doc: doc, onDelete: () => onDelete(doc.docId))),
-            _AddCard(onTap: onAdd),
-          ],
-        ),
+    return SizedBox(
+      height: 130,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        children: [
+          ...docs.map((doc) => _DocCard(doc: doc, onDelete: () => onDelete(doc.docId))),
+          _AddCard(onTap: onAdd),
+        ],
       ),
-    ]);
+    );
   }
 }
 
@@ -578,7 +735,7 @@ class _DocCard extends StatelessWidget {
           maxLines: 2, overflow: TextOverflow.ellipsis),
         const Spacer(),
         Text('${doc.chunks} chunks', style: TextStyle(
-          color: cs.onSurface.withOpacity(0.35), fontSize: 10)),
+          color: cs.onSurface.withOpacity(0.5), fontSize: 10, fontWeight: FontWeight.w600)),
       ]),
     );
   }
@@ -614,7 +771,6 @@ class _EmptyDocsBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     return Container(
       height: 60,
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),

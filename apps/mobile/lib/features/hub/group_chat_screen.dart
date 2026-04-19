@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import '../../core/network/api_client.dart';
 import '../../core/theme/design_tokens.dart';
 import '../../shared/widgets/shimmer_widgets.dart';
+import 'presence_provider.dart';
 
 class GroupChatScreen extends ConsumerStatefulWidget {
   final String groupId;
@@ -24,6 +25,7 @@ class _GroupChatScreenState extends ConsumerState<GroupChatScreen> {
   bool _loading = true;
   String? _groupName;
   bool _sending = false;
+  Map<String, dynamic>? _replyTo;
 
   String get _myId => _supabase.auth.currentUser?.id ?? '';
 
@@ -147,13 +149,23 @@ class _GroupChatScreenState extends ConsumerState<GroupChatScreen> {
     setState(() => _sending = true);
     _controller.clear();
 
+    final replyTo = _replyTo;
+    setState(() => _replyTo = null); // clear immediately
+
     // ── Optimistic update: show immediately ──
     final myUser = _supabase.auth.currentUser;
     final optimistic = {
       'id': 'optimistic_${DateTime.now().millisecondsSinceEpoch}',
       'content': text,
       'message_type': type,
-      'metadata': metadata,
+      'metadata': {
+        if (metadata != null) ...metadata,
+        if (replyTo != null) 'reply_to': {
+          'id': replyTo['id'],
+          'content': replyTo['content'],
+          'sender_name': replyTo['sender_name'],
+        },
+      },
       'is_pinned': false,
       'sender_id': _myId,
       'sender_name': myUser?.userMetadata?['display_name'] ?? myUser?.email?.split('@')[0] ?? 'Me',
@@ -169,7 +181,8 @@ class _GroupChatScreenState extends ConsumerState<GroupChatScreen> {
         'sender_id': _myId,
         'content': text,
         'message_type': type,
-        if (metadata != null) 'metadata': metadata,
+        'metadata': optimistic['metadata'],
+        if (replyTo != null) 'reply_to_id': replyTo['id'],
       }).select().single();
 
       // Replace optimistic with real message
@@ -292,11 +305,14 @@ class _GroupChatScreenState extends ConsumerState<GroupChatScreen> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
+    final presence = ref.watch(presenceProvider(widget.groupId));
+    final typingIds = presence.typingUserIds;
 
     return Scaffold(
-      backgroundColor: AppColors.darkBg, // keep dark bg for chat focus
+      backgroundColor: AppColors.cardBg(context),
       appBar: AppBar(
+        surfaceTintColor: Colors.transparent,
         backgroundColor: AppColors.surface(context),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
@@ -394,11 +410,24 @@ class _GroupChatScreenState extends ConsumerState<GroupChatScreen> {
                       msg: msg,
                       isMe: isMe,
                       showSenderName: showName,
+                      onReply: () => setState(() => _replyTo = msg),
                     ),
                   ]);
                 },
               ),
         ),
+
+        // Typing indicators
+        if (typingIds.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(children: [
+              Text(
+                '${typingIds.map((id) => presence.idToName[id] ?? 'Someone').join(', ')} ${typingIds.length > 1 ? 'are' : 'is'} typing...',
+                style: TextStyle(fontSize: 10, color: AppColors.indigo, fontStyle: FontStyle.italic),
+              ),
+            ]),
+          ),
 
         // Input bar
         _InputBar(
@@ -406,6 +435,9 @@ class _GroupChatScreenState extends ConsumerState<GroupChatScreen> {
           sending: _sending,
           onSend: _send,
           onCode: _showCodeSheet,
+          onTyping: () => ref.read(presenceProvider(widget.groupId).notifier).setTyping(true),
+          replyTo: _replyTo,
+          onCancelReply: () => setState(() => _replyTo = null),
         ),
       ]),
     );
@@ -419,10 +451,13 @@ class _MessageBubble extends StatelessWidget {
   final Map<String, dynamic> msg;
   final bool isMe;
   final bool showSenderName;
+  final VoidCallback onReply;
+
   const _MessageBubble({
     required this.msg,
     required this.isMe,
     required this.showSenderName,
+    required this.onReply,
   });
 
   @override
@@ -432,11 +467,13 @@ class _MessageBubble extends StatelessWidget {
     final isCode = msg['message_type'] == 'code';
     final content = msg['content'] as String? ?? '';
     final lang = (msg['metadata'] as Map?)?['language'] as String? ?? '';
+    final replyTo = (msg['metadata'] as Map?)?['reply_to'] as Map?;
 
     final bubbleColor = isMe
-        ? AppColors.indigo
-        : isDark ? AppColors.darkSurface : Colors.white;
-    final textColor = isMe ? Colors.white : cs.onSurface;
+        ? AppColors.indigo.withOpacity(0.9)
+        : isDark ? AppColors.darkSurface.withOpacity(0.8) : Colors.white.withOpacity(0.9);
+    
+    final textColor = isMe ? Colors.white : AppColors.textPrimary(context);
 
     final timeStr = () {
       try {
@@ -446,15 +483,15 @@ class _MessageBubble extends StatelessWidget {
     }();
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 2),
+      padding: const EdgeInsets.only(bottom: 6),
       child: Column(
         crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         children: [
           if (showSenderName && !isMe)
             Padding(
-              padding: const EdgeInsets.only(left: 40, bottom: 2),
+              padding: const EdgeInsets.only(left: 42, bottom: 4),
               child: Text(msg['sender_name'] as String? ?? 'User',
-                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: cs.primary)),
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppColors.indigo, letterSpacing: 0.5)),
             ),
           Row(
             mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
@@ -462,155 +499,289 @@ class _MessageBubble extends StatelessWidget {
             children: [
               if (!isMe) ...[
                 CircleAvatar(
-                  radius: 14,
-                  backgroundColor: cs.primaryContainer,
+                  radius: 15,
+                  backgroundColor: AppColors.indigo.withOpacity(0.1),
                   child: Text(
                     (msg['sender_name'] as String? ?? 'U')[0].toUpperCase(),
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: cs.onPrimaryContainer),
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppColors.indigo),
                   ),
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: 8),
               ],
               Flexible(
                 child: GestureDetector(
+                  onHorizontalDragEnd: (details) {
+                    if (details.primaryVelocity! < -100) onReply();
+                  },
                   onLongPress: () {
-                    Clipboard.setData(ClipboardData(text: content));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Copied!'), duration: Duration(seconds: 1)),
-                    );
+                    HapticFeedback.mediumImpact();
+                    _showMessageMenu(context, content, onReply);
                   },
                   child: Container(
                     margin: EdgeInsets.only(left: isMe ? 60 : 0, right: isMe ? 0 : 60),
-                    padding: const EdgeInsets.fromLTRB(14, 10, 14, 6),
+                    padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
                     decoration: BoxDecoration(
                       color: bubbleColor,
                       borderRadius: BorderRadius.only(
-                        topLeft: const Radius.circular(18),
-                        topRight: const Radius.circular(18),
-                        bottomLeft: Radius.circular(isMe ? 18 : 4),
-                        bottomRight: Radius.circular(isMe ? 4 : 18),
+                        topLeft: const Radius.circular(20),
+                        topRight: const Radius.circular(20),
+                        bottomLeft: Radius.circular(isMe ? 20 : 4),
+                        bottomRight: Radius.circular(isMe ? 4 : 20),
                       ),
-                      boxShadow: [BoxShadow(
-                        color: Colors.black.withOpacity(0.06),
-                        blurRadius: 4, offset: const Offset(0, 1),
-                      )],
+                      border: Border.all(
+                        color: isMe ? Colors.white.withOpacity(0.1) : AppColors.border(context),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(isDark ? 0.2 : 0.05),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        )
+                      ],
                     ),
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      // Reply Preview
+                      if (replyTo != null)
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: (isMe ? Colors.black : AppColors.indigo).withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border(left: BorderSide(color: isMe ? Colors.white54 : AppColors.indigo, width: 3)),
+                          ),
+                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Text(replyTo['sender_name'] ?? 'User', 
+                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: isMe ? Colors.white70 : AppColors.indigo)),
+                            Text(replyTo['content'] ?? '', 
+                              maxLines: 1, overflow: TextOverflow.ellipsis,
+                              style: TextStyle(fontSize: 12, color: isMe ? Colors.white60 : AppColors.textSecondary(context))),
+                          ]),
+                        ),
+
                       // Content
                       if (isCode)
-                        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Row(children: [
-                            Icon(Icons.code, size: 12, color: isMe ? Colors.white70 : cs.outline),
-                            const SizedBox(width: 4),
-                            Text(lang, style: TextStyle(fontSize: 11, color: isMe ? Colors.white70 : cs.outline)),
-                          ]),
-                          const SizedBox(height: 6),
-                          Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: isDark ? const Color(0xFF1E1E2E) : const Color(0xFF282A36), // code block bg stays dark
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(content,
-                              style: const TextStyle(fontFamily: 'monospace', color: Color(0xFF50FA7B), fontSize: 12)),
-                          ),
-                        ])
+                        _CodeBlock(content: content, lang: lang, isMe: isMe)
                       else
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(content, style: TextStyle(color: textColor, fontSize: 15, height: 1.35))
+                        Text(content, style: TextStyle(color: textColor, fontSize: 15, height: 1.4, letterSpacing: 0.2)),
+
+                      // Footer
+                      const SizedBox(height: 4),
+                      Row(mainAxisSize: MainAxisSize.min, children: [
+                        const Spacer(),
+                        Text(
+                          timeStr,
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: isMe ? Colors.white60 : AppColors.textMuted(context),
+                          ),
                         ),
-                      // Time — always shown bottom-right inside bubble (WhatsApp style)
-                      const SizedBox(height: 2),
-                      Text(
-                        timeStr,
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: isMe ? Colors.white54 : cs.outline,
-                        ),
-                      ),
+                        if (isMe) ...[
+                          const SizedBox(width: 4),
+                          Icon(Icons.done_all, size: 12, color: Colors.white60),
+                        ],
+                      ]),
                     ]),
                   ),
                 ),
               ),
-              if (isMe) const SizedBox(width: 6),
+              if (isMe) const SizedBox(width: 8),
             ],
           ),
-          const SizedBox(height: 2),
         ],
+      ),
+    );
+  }
+
+  void _showMessageMenu(BuildContext context, String content, VoidCallback onReply) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surface(context),
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+            leading: const Icon(Icons.reply_outlined),
+            title: const Text('Reply'),
+            onTap: () { Navigator.pop(ctx); onReply(); },
+          ),
+          ListTile(
+            leading: const Icon(Icons.copy_outlined),
+            title: const Text('Copy Text'),
+            onTap: () {
+              Clipboard.setData(ClipboardData(text: content));
+              Navigator.pop(ctx);
+            },
+          ),
+        ]),
       ),
     );
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+class _CodeBlock extends StatelessWidget {
+  final String content, lang;
+  final bool isMe;
+  const _CodeBlock({required this.content, required this.lang, required this.isMe});
 
-// Input Bar
-// ─────────────────────────────────────────────────────────────────────────────
+  @override
+  Widget build(BuildContext context) {
+    final isDark = context.isDark;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        Icon(Icons.code, size: 12, color: isMe ? Colors.white70 : AppColors.indigo),
+        const SizedBox(width: 4),
+        Text(lang.toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: isMe ? Colors.white70 : AppColors.indigo)),
+      ]),
+      const SizedBox(height: 8),
+      Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: isDark ? Colors.black.withOpacity(0.3) : Colors.black.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.white.withOpacity(0.05)),
+        ),
+        child: Text(content,
+          style: TextStyle(fontFamily: 'monospace', color: isDark ? const Color(0xFF50FA7B) : const Color(0xFF1B5E20), fontSize: 12)),
+      ),
+    ]);
+  }
+}
+
+// ── Input Bar ─────────────────────────────────────────────────────────────────
 class _InputBar extends StatelessWidget {
   final TextEditingController controller;
   final bool sending;
   final Function({String type, Map<String, dynamic>? metadata}) onSend;
   final VoidCallback onCode;
-  const _InputBar({required this.controller, required this.sending, required this.onSend, required this.onCode});
+  final VoidCallback onTyping;
+  final Map<String, dynamic>? replyTo;
+  final VoidCallback onCancelReply;
+
+  const _InputBar({
+    required this.controller,
+    required this.sending,
+    required this.onSend,
+    required this.onCode,
+    required this.onTyping,
+    this.replyTo,
+    required this.onCancelReply,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     final isDark = context.isDark;
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(8, 8, 8, 16),
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
       decoration: BoxDecoration(
-        color: isDark ? AppColors.darkSurface : Colors.white,
+        color: AppColors.surface(context).withOpacity(0.9),
         border: Border(top: BorderSide(color: AppColors.border(context))),
-        boxShadow: isDark ? [] : [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, -2))],
       ),
-      child: SafeArea(top: false, child: Row(children: [
-        // Code button
-        IconButton(
-          icon: const Icon(Icons.code, color: AppColors.indigo),
-          tooltip: 'Send code snippet',
-          onPressed: onCode,
-        ),
-        // Text field
-        Expanded(
-          child: Container(
+      child: SafeArea(top: false, child: Column(mainAxisSize: MainAxisSize.min, children: [
+        if (replyTo != null)
+          Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: isDark ? AppColors.darkBg : AppColors.cardBg(context),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: AppColors.border(context)),
+              color: AppColors.indigo.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
             ),
-            child: TextField(
-              controller: controller,
-              minLines: 1, maxLines: 5,
-              textInputAction: TextInputAction.newline,
-              decoration: InputDecoration(
-                hintText: 'Message...',
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                border: InputBorder.none,
-                hintStyle: TextStyle(color: cs.outline),
+            child: Row(children: [
+              const Icon(Icons.reply, size: 16, color: AppColors.indigo),
+              const SizedBox(width: 8),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('Replying to ${replyTo!['sender_name']}', 
+                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: AppColors.indigo)),
+                Text(replyTo!['content'], maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: AppColors.textSecondary(context))),
+              ])),
+              IconButton(icon: const Icon(Icons.close, size: 18), onPressed: onCancelReply),
+            ]),
+          ),
+        Row(children: [
+          IconButton(
+            icon: const Icon(Icons.add_circle_outline, color: AppColors.indigo, size: 28),
+            onPressed: () => _showAttachmentMenu(context),
+          ),
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                color: isDark ? Colors.black.withOpacity(0.2) : Colors.black.withOpacity(0.04),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: AppColors.border(context)),
               ),
-              onSubmitted: (_) => onSend(),
+              child: TextField(
+                controller: controller,
+                minLines: 1, maxLines: 5,
+                onChanged: (_) => onTyping(),
+                style: TextStyle(color: AppColors.textPrimary(context)),
+                decoration: InputDecoration(
+                  hintText: 'Type a message...',
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  border: InputBorder.none,
+                  hintStyle: TextStyle(color: AppColors.textMuted(context), fontSize: 14),
+                ),
+              ),
             ),
           ),
-        ),
-        const SizedBox(width: 8),
-        // Send button
-        AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          child: sending
-            ? const Padding(padding: EdgeInsets.all(12), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))
+          const SizedBox(width: 8),
+          sending
+            ? const SizedBox(width: 44, height: 44, child: Center(child: CircularProgressIndicator(strokeWidth: 2)))
             : FloatingActionButton.small(
-                heroTag: 'send_msg',
                 onPressed: () => onSend(),
                 backgroundColor: AppColors.indigo,
-                elevation: 0,
+                elevation: 4,
                 child: const Icon(Icons.send, color: Colors.white, size: 18),
               ),
-        ),
+        ]),
       ])),
     );
+  }
+
+  void _showAttachmentMenu(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surface(context),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
+              _AttachmentItem(icon: Icons.code, label: 'Code', color: AppColors.amber, onTap: () { Navigator.pop(ctx); onCode(); }),
+              _AttachmentItem(icon: Icons.draw_outlined, label: 'Board', color: AppColors.rose, onTap: () { Navigator.pop(ctx); }),
+              _AttachmentItem(icon: Icons.insert_drive_file_outlined, label: 'File', color: AppColors.indigo, onTap: () {}),
+            ]),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+class _AttachmentItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+  const _AttachmentItem({required this.icon, required this.label, required this.color, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(mainAxisSize: MainAxisSize.min, children: [
+      InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          width: 56, height: 56,
+          decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(16), border: Border.all(color: color.withOpacity(0.3))),
+          child: Icon(icon, color: color, size: 28),
+        ),
+      ),
+      const SizedBox(height: 8),
+      Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textSecondary(context))),
+    ]);
   }
 }
 

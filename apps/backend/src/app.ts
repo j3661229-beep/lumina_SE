@@ -17,6 +17,7 @@ import authRouter from './routes/auth';
 import profileRouter from './routes/profile';
 import demoRouter from './routes/demo';
 import ragRouter from './routes/rag';
+import { initLocalAi } from './services/localAi';
 
 const app = express();
 
@@ -72,6 +73,11 @@ app.listen(Number(PORT), HOST, async () => {
   } catch (e) {
     console.error('❌ Prisma connection failed:', e);
   }
+  // Preload Xenova AI models in the background so first /rag request doesn't timeout
+  console.log('[LocalAI] Preloading models in background…');
+  initLocalAi()
+    .then(() => console.log('[LocalAI] ✅ Models ready.'))
+    .catch(e => console.error('[LocalAI] ❌ Preload failed:', e));
 });
 
 export default app;

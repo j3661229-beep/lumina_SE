@@ -1,12 +1,12 @@
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:isar/isar.dart';
 import 'package:path_provider/path_provider.dart';
-import 'gemini_rag_service.dart';
 
 part 'vector_store.g.dart';
 
-/// A persisted document chunk with its 768-dim Gemini embedding.
-/// Falls back to 384-dim hash-based embedding when offline.
+/// A persisted document chunk with its 384-dim embedding.
+/// Embeddings are computed on-device using the hashing trick (no server needed).
 @collection
 class DocumentChunk {
   Id id = Isar.autoIncrement;
@@ -39,22 +39,69 @@ class VectorStore {
     _isar = await Isar.open(
       [DocumentChunkSchema],
       directory: dir.path,
-      name: 'lumina_rag_v2',
+      name: 'lumina_rag_v3', // v3: hash embeddings (breaking change from neural/zero vectors)
     );
     _initialized = true;
   }
 
-  // ── Generate embedding — Gemini online or hash-based offline ──────────────
-  Future<List<double>> embed(String text, {bool isQuery = false}) async {
-    final geminiEmb = isQuery
-        ? await GeminiRagService.instance.embedQuery(text)
-        : await GeminiRagService.instance.embed(text);
+  // ── On-device embedding — hashing trick (pure Dart, no network) ──────────
+  // Produces a 384-dim L2-normalised dense vector from word tokens + bigrams.
+  // Cosine similarity between these gives meaningful keyword-overlap scores,
+  // which is sufficient for RAG retrieval over student notes/textbooks.
+  static List<double> embedLocal(String text, {int dims = 384}) {
+    final words = text
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9\s]'), ' ')
+        .split(RegExp(r'\s+'))
+        .where((w) => w.length > 1)
+        .toList();
 
-    if (geminiEmb != null) return geminiEmb;
+    if (words.isEmpty) return List.filled(dims, 0.0);
 
-      // Offline fallback: store zero-vectors (so Isar schema is satisfied)
-      // We will use keyword searching via text overlap when offline anyway!
-      return List.filled(768, 0.0);
+    final vec = List<double>.filled(dims, 0.0);
+
+    for (int wi = 0; wi < words.length; wi++) {
+      final word = words[wi];
+
+      // Two independent hash functions for better spread (FNV-1a style)
+      int h1 = 2166136261;
+      int h2 = 0x811c9dc5;
+      for (final c in word.codeUnits) {
+        h1 = ((h1 ^ c) * 16777619) & 0x7FFFFFFF;
+        h2 = ((h2 ^ c) * 1000003) & 0x7FFFFFFF;
+      }
+      vec[h1 % dims] += 1.0;    // unigram, full weight
+      vec[h2 % dims] += 0.6;    // unigram, secondary hash
+
+      // Bigrams — improves phrase-level matching ("data structure", "binary tree")
+      if (wi + 1 < words.length) {
+        final bigram = '${word}_${words[wi + 1]}';
+        int hb = 2166136261;
+        for (final c in bigram.codeUnits) {
+          hb = ((hb ^ c) * 16777619) & 0x7FFFFFFF;
+        }
+        vec[hb % dims] += 0.8;
+      }
+
+      // Trigrams — captures short phrases
+      if (wi + 2 < words.length) {
+        final trigram = '${word}_${words[wi + 1]}_${words[wi + 2]}';
+        int ht = 0x811c9dc5;
+        for (final c in trigram.codeUnits) {
+          ht = ((ht ^ c) * 1000003) & 0x7FFFFFFF;
+        }
+        vec[ht % dims] += 0.5;
+      }
+    }
+
+    // L2-normalise so cosine similarity = dot product
+    var norm = 0.0;
+    for (final v in vec) norm += v * v;
+    norm = sqrt(norm);
+    if (norm > 0) {
+      for (int i = 0; i < dims; i++) vec[i] /= norm;
+    }
+    return vec;
   }
 
   // ── Store all chunks from a document ─────────────────────────────────────
@@ -69,7 +116,7 @@ class VectorStore {
     await addChunksBatch(docId, docTitle, chunks, docType, startIndex: 0);
   }
 
-  // ── Store a batch of chunks (used for progress reporting) ─────────────────
+  // ── Store a batch of chunks — pure on-device, no network calls ───────────
   Future<void> addChunksBatch(
     String docId,
     String docTitle,
@@ -80,7 +127,7 @@ class VectorStore {
     await init();
     final items = <DocumentChunk>[];
     for (int i = 0; i < chunks.length; i++) {
-      final emb = await embed(chunks[i]);
+      final emb = embedLocal(chunks[i]);  // pure Dart, no network
       items.add(DocumentChunk()
         ..docId = docId
         ..docTitle = docTitle
@@ -91,39 +138,32 @@ class VectorStore {
         ..chunkIndex = startIndex + i);
     }
     await _isar.writeTxn(() => _isar.documentChunks.putAll(items));
+    debugPrint('[VectorStore] Stored batch: startIndex=$startIndex, count=${items.length}, docId=$docId');
   }
 
-  // ── Semantic search — cosine similarity if online, keyword matching if offline
+  // ── Semantic search — cosine similarity on local hash embeddings ──────────
   Future<List<DocumentChunk>> search(String query, {int topK = 5}) async {
     await init();
-    final geminiEmb = await GeminiRagService.instance.embedQuery(query);
+    final qEmb = embedLocal(query);
     final all = await _isar.documentChunks.where().findAll();
 
-    if (geminiEmb != null) {
-      // Online semantic search
-      final scored = all
-          .map((c) => (chunk: c, score: _cosine(geminiEmb, c.embedding)))
-          .toList()
-        ..sort((a, b) => b.score.compareTo(a.score));
-      return scored.take(topK).map((s) => s.chunk).toList();
-    } else {
-      // Offline fallback: Keyword overlap (TF-IDF/Jaccard approximation)
-      final qTerms = query.toLowerCase().split(RegExp(r'\W+')).where((t) => t.length > 2).toSet();
-      if (qTerms.isEmpty) return all.take(topK).toList();
+    debugPrint('[VectorStore] search() — total chunks in DB: ${all.length}');
+    if (all.isEmpty) return [];
 
-      final scored = all.map((c) {
-        final cTerms = c.chunkText.toLowerCase().split(RegExp(r'\W+')).where((t) => t.length > 2).toSet();
-        final intersect = qTerms.intersection(cTerms).length;
-        // Simple overlap score favoring dense matches in shorter chunks
-        final score = intersect / sqrt(cTerms.length.clamp(1, 1000)); 
-        return (chunk: c, score: score);
-      }).toList()
-        ..sort((a, b) => b.score.compareTo(a.score));
+    final scored = all
+        .map((c) => (chunk: c, score: _cosine(qEmb, c.embedding)))
+        .toList()
+      ..sort((a, b) => b.score.compareTo(a.score));
 
-      // Filter to chunks that actually matched at least one keyword, unless absolutely none did
-      final filtered = scored.where((s) => s.score > 0).toList();
-      return (filtered.isNotEmpty ? filtered : scored).take(topK).map((s) => s.chunk).toList();
+    final top = scored.take(topK).toList();
+    for (final s in top) {
+      debugPrint('[VectorStore] score=${s.score.toStringAsFixed(4)} | ${s.chunk.chunkText.substring(0, s.chunk.chunkText.length.clamp(0, 80))}');
     }
+
+    final results = scored.where((s) => s.score > 0.01).take(topK).toList();
+    return (results.isNotEmpty ? results : scored.take(topK).toList())
+        .map((s) => s.chunk)
+        .toList();
   }
 
   // ── All indexed documents (deduplicated by docId) ─────────────────────────
@@ -145,6 +185,12 @@ class VectorStore {
     await _isar.writeTxn(
       () => _isar.documentChunks.filter().docIdEqualTo(docId).deleteAll(),
     );
+  }
+
+  /// Wipe ALL indexed chunks — use after embedding schema changes
+  Future<void> clearAll() async {
+    await init();
+    await _isar.writeTxn(() => _isar.documentChunks.clear());
   }
 
   Future<int> get totalChunks async {

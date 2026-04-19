@@ -273,6 +273,23 @@ router.get('/slots', requireAuth, async (req: AuthRequest, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────
+// GET /api/timetable/holidays — Return all stored holidays
+// ─────────────────────────────────────────────────────────────
+router.get('/holidays', requireAuth, async (req: AuthRequest, res) => {
+  const holidays = await prisma.holiday.findMany({
+    where: { userId: req.userId! },
+    orderBy: { date: 'asc' },
+  });
+  return res.json(
+    holidays.map((h) => ({
+      id: h.id,
+      name: h.name,
+      date: h.date.toISOString().split('T')[0], // YYYY-MM-DD
+    }))
+  );
+});
+
+// ─────────────────────────────────────────────────────────────
 // PUT /api/timetable/slots/:id — Update individual slot
 // ─────────────────────────────────────────────────────────────
 router.put(
@@ -459,7 +476,11 @@ router.get('/bunk-analytics', requireAuth, async (req: AuthRequest, res) => {
       grouped[r.subject_name].total_planned += r.total_planned;
       const g = grouped[r.subject_name];
       g.percentage = g.total_held > 0 ? Math.round((g.attended / g.total_held) * 100) : 0;
-      g.bunks_remaining = Math.max(0, Math.floor(g.attended / 0.75) - g.total_planned);
+      
+      // industry standard 75% bunk calculation
+      const minRequired = Math.ceil(0.75 * g.total_planned);
+      const maxTotalBunks = g.total_planned - minRequired;
+      g.bunks_remaining = maxTotalBunks - g.absent;
     }
   }
 

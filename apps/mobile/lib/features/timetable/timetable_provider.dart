@@ -135,3 +135,17 @@ final attendanceLogsProvider = FutureProvider<Map<String, String>>((ref) async {
 final bunkAnalyticsProvider = FutureProvider<List<dynamic>>(
   (ref) => ApiClient.instance.get<List<dynamic>>('/timetable/bunk-analytics'),
 );
+
+/// Returns a set of holiday date strings (YYYY-MM-DD) for the current user
+final holidaysProvider = FutureProvider<Map<String, String>>((ref) async {
+  final list = await ApiClient.instance.get<List<dynamic>>('/timetable/holidays');
+  final map = <String, String>{};
+  for (final h in list) {
+    final date = h['date'] as String?;
+    final name = h['name'] as String?;
+    if (date != null && name != null) {
+      map[date] = name;
+    }
+  }
+  return map; // { 'YYYY-MM-DD': 'Holiday Name' }
+});

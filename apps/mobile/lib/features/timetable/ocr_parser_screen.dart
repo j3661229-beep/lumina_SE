@@ -6,6 +6,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:dio/dio.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme/design_tokens.dart';
+import 'package:intl/intl.dart';
 import 'timetable_provider.dart';
 import 'timetable_models.dart';
 
@@ -143,8 +144,7 @@ class _OcrParserScreenState extends ConsumerState<OcrParserScreen> {
       ),
       body: Padding(
         padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+        child: ListView(
           children: [
             // Instruction card
             Container(
@@ -247,6 +247,15 @@ class _OcrParserScreenState extends ConsumerState<OcrParserScreen> {
                   ),
                 ]),
               ),
+              if (_semStart != null && _semEnd != null && _parsedSlots.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                _ProjectionPreview(
+                  start: _semStart!,
+                  end: _semEnd!,
+                  slots: _parsedSlots,
+                  holidays: _parsedHolidays,
+                ),
+              ],
               const SizedBox(height: 24),
 
               // ── Slots & Holidays ────────────────────────────────
@@ -263,21 +272,29 @@ class _OcrParserScreenState extends ConsumerState<OcrParserScreen> {
                 ),
               ]),
               const SizedBox(height: 8),
-              Expanded(
-                child: ListView(
-                  children: [
-                    if (_parsedSlots.isNotEmpty) ...[
-                      const _SectionHeader(label: 'Classes'),
-                      ..._parsedSlots.asMap().entries.map((e) => _buildSlotTile(e.key, e.value)),
-                    ],
-                    if (_parsedHolidays.isNotEmpty) ...[
-                      const SizedBox(height: 16),
-                      const _SectionHeader(label: 'Holidays'),
-                      ..._parsedHolidays.asMap().entries.map((e) => _buildHolidayTile(e.key, e.value)),
-                    ],
-                  ],
+              Row(children: [
+                Text('Detected Items',
+                  style: TextStyle(
+                    fontFamily: 'Syne', fontWeight: FontWeight.w700,
+                    color: Theme.of(context).colorScheme.onSurface, fontSize: 16)),
+                const Spacer(),
+                TextButton.icon(
+                  onPressed: () => setState(() { _parsedSlots = []; _parsedHolidays = []; }),
+                  icon: const Icon(Icons.clear, size: 14, color: AppColors.rose),
+                  label: const Text('Clear All', style: TextStyle(color: AppColors.rose)),
                 ),
-              ),
+              ]),
+              const SizedBox(height: 8),
+
+              if (_parsedSlots.isNotEmpty) ...[
+                const _SectionHeader(label: 'Classes'),
+                ..._parsedSlots.asMap().entries.map((e) => _buildSlotTile(e.key, e.value)),
+              ],
+              if (_parsedHolidays.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                const _SectionHeader(label: 'Holidays'),
+                ..._parsedHolidays.asMap().entries.map((e) => _buildHolidayTile(e.key, e.value)),
+              ],
               const SizedBox(height: 14),
               Container(
                 decoration: DesignStyles.gradientButton(),
@@ -290,9 +307,10 @@ class _OcrParserScreenState extends ConsumerState<OcrParserScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 14),
                   ),
                   icon: const Icon(Icons.cloud_upload_outlined),
-                  label: Text('Save Timetable', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                  label: const Text('Save Timetable', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
                 ),
               ),
+              const SizedBox(height: 30), // Padding for bottom
             ],
           ],
         ),
@@ -310,6 +328,7 @@ class _OcrParserScreenState extends ConsumerState<OcrParserScreen> {
         margin: const EdgeInsets.only(bottom: 6),
         decoration: AppStyles.glassCard(context),
         child: ListTile(
+          onTap: () => _showEditParsedSlotDialog(index, s),
           leading: CircleAvatar(
             backgroundColor: AppColors.indigo.withOpacity(0.15),
             child: Text(s.dayOfWeek.substring(0, 3).toUpperCase(),
@@ -319,7 +338,71 @@ class _OcrParserScreenState extends ConsumerState<OcrParserScreen> {
           subtitle: Text(
             '${s.startTime} – ${s.endTime}  •  ${s.slotType}${s.teacher != null ? ' • ${s.teacher}' : ''}',
             style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4), fontSize: 12)),
+          trailing: IconButton(
+            icon: const Icon(Icons.edit_outlined, size: 20),
+            onPressed: () => _showEditParsedSlotDialog(index, s),
+          ),
         ),
+      ),
+    );
+  }
+
+  void _showEditParsedSlotDialog(int index, ParsedSlot s) {
+    final subCtrl = TextEditingController(text: s.subjectName);
+    final teaCtrl = TextEditingController(text: s.teacher);
+    final startCtrl = TextEditingController(text: s.startTime);
+    final endCtrl = TextEditingController(text: s.endTime);
+    String day = s.dayOfWeek;
+    String type = s.slotType;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Edit Slot', style: TextStyle(fontFamily: 'Syne', fontWeight: FontWeight.w800)),
+        content: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextField(controller: subCtrl, decoration: const InputDecoration(labelText: 'Subject Name')),
+            DropdownButtonFormField<String>(
+              value: day.toLowerCase(),
+              items: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'].map((d) => 
+                DropdownMenuItem(value: d, child: Text(d[0].toUpperCase() + d.substring(1)))).toList(),
+              onChanged: (v) => v != null ? day = v : null,
+              decoration: const InputDecoration(labelText: 'Day'),
+            ),
+            Row(children: [
+              Expanded(child: TextField(controller: startCtrl, decoration: const InputDecoration(labelText: 'Start'))),
+              const SizedBox(width: 10),
+              Expanded(child: TextField(controller: endCtrl, decoration: const InputDecoration(labelText: 'End'))),
+            ]),
+            TextField(controller: teaCtrl, decoration: const InputDecoration(labelText: 'Teacher (Optional)')),
+             DropdownButtonFormField<String>(
+              value: type.toLowerCase(),
+              items: ['lecture', 'lab', 'tutorial'].map((t) => 
+                DropdownMenuItem(value: t, child: Text(t[0].toUpperCase() + t.substring(1)))).toList(),
+              onChanged: (v) => v != null ? type = v : null,
+              decoration: const InputDecoration(labelText: 'Type'),
+            ),
+          ]),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () {
+              setState(() {
+                _parsedSlots[index] = ParsedSlot(
+                  subjectName: subCtrl.text,
+                  dayOfWeek: day,
+                  startTime: startCtrl.text,
+                  endTime: endCtrl.text,
+                  teacher: teaCtrl.text.isEmpty ? null : teaCtrl.text,
+                  slotType: type,
+                );
+              });
+              Navigator.pop(ctx);
+            },
+            child: const Text('Save'),
+          ),
+        ],
       ),
     );
   }
@@ -397,3 +480,73 @@ class _DateTile extends StatelessWidget {
 }
 
 // ParsedSlot, ParsedHoliday, OcrResult moved to timetable_models.dart
+class _ProjectionPreview extends StatelessWidget {
+  final DateTime start, end;
+  final List<ParsedSlot> slots;
+  final List<ParsedHoliday> holidays;
+
+  const _ProjectionPreview({required this.start, required this.end, required this.slots, required this.holidays});
+
+  @override
+  Widget build(BuildContext context) {
+    final holidayDates = holidays.map((h) => h.date).toSet();
+    final totalDays = end.difference(start).inDays;
+    final totalWeeks = (totalDays / 7).ceil();
+    
+    // Group slots by subject to calculate totals
+    final Map<String, int> subjectTotals = {};
+    for (var slot in slots) {
+      final dayMap = {'monday': 1, 'tuesday': 2, 'wednesday': 3, 'thursday': 4, 'friday': 5, 'saturday': 6, 'sunday': 7};
+      final targetDay = dayMap[slot.dayOfWeek.toLowerCase()] ?? 1;
+      
+      int count = 0;
+      DateTime current = start;
+      while (current.isBefore(end.add(const Duration(days: 1)))) {
+        if (current.weekday == targetDay) {
+          final dateStr = DateFormat('yyyy-MM-dd').format(current);
+          if (!holidayDates.contains(dateStr)) {
+            count++;
+          }
+        }
+        current = current.add(const Duration(days: 1));
+      }
+      subjectTotals[slot.subjectName] = (subjectTotals[slot.subjectName] ?? 0) + count;
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.indigo.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.indigo.withOpacity(0.2)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Icon(Icons.analytics_outlined, size: 18, color: AppColors.indigo),
+          const SizedBox(width: 8),
+          Text('Semester Forecast', style: TextStyle(
+            fontFamily: 'Syne', fontWeight: FontWeight.w800, color: AppColors.indigo, fontSize: 13)),
+          const Spacer(),
+          Text('$totalWeeks Weeks', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.indigo)),
+        ]),
+        const SizedBox(height: 12),
+        ...subjectTotals.entries.map((e) {
+          final maxBunks = (e.value - (e.value * 0.75).ceil()).toInt();
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              Expanded(child: Text(e.key, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500))),
+              Text('${e.value} classes', style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5))),
+              const SizedBox(width: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(color: AppColors.green.withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
+                child: Text('Bunk Budget: $maxBunks', style: const TextStyle(fontSize: 10, color: AppColors.green, fontWeight: FontWeight.w700)),
+              ),
+            ]),
+          );
+        }),
+      ]),
+    );
+  }
+}

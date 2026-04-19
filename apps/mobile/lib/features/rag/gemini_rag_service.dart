@@ -1,114 +1,136 @@
-import 'package:dio/dio.dart';
-import '../../core/network/api_client.dart';
-
-/// Handles RAG pipeline using the Local Offline Node AI server over ApiClient
-/// Falls back to Gemini strictly if Local processing fails.
+/// Fully on-device RAG synthesis service.
+/// Zero network calls. Zero cloud. Works with no internet and no backend.
+///
+/// Pipeline:
+///   1. Embeddings  → VectorStore.embedLocal() [pure Dart, instant]
+///   2. Vector search → Isar + cosine similarity [local]
+///   3. Synthesis   → Extractive sentence scoring [pure Dart, instant]
 class GeminiRagService {
-  static const _apiKey = String.fromEnvironment('GEMINI_API_KEY',
-      defaultValue: 'ERROR_API_KEY_NOT_CONFIGURED');
-  static const _embedUrl =
-      'https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent';
-  static const _chatUrl =
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
-
-  static final _dio = Dio(BaseOptions(
-    connectTimeout: const Duration(seconds: 10),
-    receiveTimeout: const Duration(seconds: 30),
-  ));
-
   static GeminiRagService? _instance;
   static GeminiRagService get instance => _instance ??= GeminiRagService._();
   GeminiRagService._();
 
-  Future<bool> isOnline() async => true; // Dummy for rag_provider compatibility
+  // Kept for API compatibility — everything is local now
+  Future<bool> isOnline() async => false;
 
-  // ── Embed Text ──────────────────────────────────────────────────────────
-  Future<List<double>?> embed(String text) async {
-    try {
-      // 1. Try fully local, offline inference first
-      final res = await ApiClient.instance.post('/rag/embed', data: {'text': text});
-      final arr = res['embedding'] as List<dynamic>;
-      return arr.map((e) => (e as num).toDouble()).toList();
-    } catch (e) {
-      // 2. Fallback to Gemini if backend AI is unavailable
-      print('[LocalRAG] Embed failed, falling back to Gemini: $e');
-      return _embedGemini(text, isQuery: false);
-    }
-  }
+  // These methods are unused now (VectorStore.embedLocal() is called directly),
+  // but kept for compatibility.
+  Future<List<double>?> embed(String text) async => null;
+  Future<List<double>?> embedQuery(String query) async => null;
 
-  Future<List<double>?> embedQuery(String query) async {
-    try {
-      // 1. Try fully local, offline inference
-      final res = await ApiClient.instance.post('/rag/embed', data: {'text': query});
-      final arr = res['embedding'] as List<dynamic>;
-      return arr.map((e) => (e as num).toDouble()).toList();
-    } catch (e) {
-      print('[LocalRAG] Query Embed failed, falling back to Gemini: $e');
-      return _embedGemini(query, isQuery: true);
-    }
-  }
-
-  Future<List<double>?> _embedGemini(String text, {required bool isQuery}) async {
-    try {
-      final res = await _dio.post(
-        '$_embedUrl?key=$_apiKey',
-        options: Options(headers: {'Content-Type': 'application/json'}),
-        data: {
-          'model': 'models/text-embedding-004',
-          'content': {'parts': [{'text': text}]},
-          'taskType': isQuery ? 'RETRIEVAL_QUERY' : 'RETRIEVAL_DOCUMENT',
-        },
-      );
-      return (res.data['embedding']['values'] as List)
-          .map<double>((v) => (v as num).toDouble())
-          .toList();
-    } catch (_) {
-      return List.filled(384, 0.0); // Return dummy offline embeddings
-    }
-  }
-
-  // ── Synthesise Chat ─────────────────────────────────────────────────────
+  // ── Synthesise answer — fully offline ─────────────────────────────────────
   Future<String> synthesise(String query, List<String> chunks) async {
-    try {
-      // 1. Try full offline generation (Xenova / TinyLlama)
-      final res = await ApiClient.instance.post('/rag/chat', data: {
-        'query': query,
-        'chunks': chunks
-      });
-      final answer = res['text'] as String?;
-      if (answer != null && answer.isNotEmpty) return answer;
-      throw Exception("Empty response");
-    } catch (e) {
-      print('[LocalRAG] Chat failed, falling back to Gemini: $e');
-      // 2. Fallback to Gemini
-      return _synthesiseGemini(query, chunks);
+    if (chunks.isEmpty) {
+      return 'No relevant content found. Try uploading your notes first.';
     }
+    return _extractiveAnswer(query, chunks);
   }
 
-  Future<String> _synthesiseGemini(String query, List<String> chunks) async {
-    final context = chunks.asMap().entries.map((e) => '[${e.key + 1}] ${e.value}').join('\n\n');
-    try {
-      final res = await _dio.post(
-        '$_chatUrl?key=$_apiKey',
-        options: Options(headers: {'Content-Type': 'application/json'}),
-        data: {
-          'contents': [{
-            'role': 'user',
-            'parts': [{
-              'text': '''You are a proactive engineering sidekick. Answer the question using ONLY the provided excerpts.
-QUESTION: $query
-EXCERPTS:
-$context
-ANSWER:'''
-            }]
-          }],
-          'generationConfig': {'temperature': 0.1, 'maxOutputTokens': 512},
-        },
-      );
-      return res.data['candidates'][0]['content']['parts'][0]['text'] as String;
-    } catch (e) {
-      final fallbackContext = chunks.map((c) => '> ${c.replaceAll('\n', '\n> ')}').join('\n\n');
-      return '*(Offline Mode)* Here are the most relevant excerpts from your notes:\n\n$fallbackContext';
+  // ── Extractive QA ─────────────────────────────────────────────────────────
+  String _extractiveAnswer(String query, List<String> chunks) {
+    final stopwords = {
+      'the', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
+      'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would',
+      'shall', 'should', 'may', 'might', 'must', 'can', 'could',
+      'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
+      'of', 'with', 'by', 'from', 'as', 'into', 'about', 'what',
+      'how', 'why', 'when', 'where', 'who', 'which', 'that', 'this',
+      'it', 'its', 'me', 'my', 'we', 'our', 'you', 'your', 'i',
+      'explain', 'describe', 'tell', 'give', 'please', 'define',
+    };
+
+    final qTokens = query
+        .toLowerCase()
+        .split(RegExp(r'\W+'))
+        .where((t) => t.length > 2 && !stopwords.contains(t))
+        .toSet();
+
+    if (qTokens.isEmpty) {
+      return _cleanExcerpt(chunks.first);
     }
+
+    // ── Step 1: Score every candidate passage ──────────────────────────────
+    // We use two levels: full chunk scoring AND sentence-level scoring.
+    // Try sentences first; if none match well, score full chunks.
+
+    final sentenceScores = <({String text, double score})>[];
+
+    for (int ci = 0; ci < chunks.length && ci < 5; ci++) {
+      final chunk = chunks[ci];
+
+      // Split into sentences — handles period, exclamation, question mark boundaries
+      // Also splits on bullet-point patterns common in textbooks (• prefix)
+      final raw = chunk.split(RegExp(r'(?<=[.!?])\s+|(?=\s*[•\-]\s)'));
+      final sentences = raw
+          .map((s) => s.replaceAll(RegExp(r'^[•\-\s]+'), '').trim())
+          .where((s) => s.length > 20)
+          .toList();
+
+      for (final sentence in sentences) {
+        final sTokens = sentence
+            .toLowerCase()
+            .split(RegExp(r'\W+'))
+            .where((t) => t.length > 2)
+            .toSet();
+
+        final overlap = qTokens.intersection(sTokens).length;
+        if (overlap == 0) continue;
+
+        // Score: overlap density + position bonus
+        final density = overlap / (sTokens.length.clamp(1, 500) * 0.25 + 1);
+        final posBonus = 1.0 / (ci * 0.4 + 1);
+        sentenceScores.add((text: sentence, score: density * posBonus * overlap));
+      }
+    }
+
+    // ── Step 2: If we have sentence-level matches, use them ────────────────
+    if (sentenceScores.isNotEmpty) {
+      sentenceScores.sort((a, b) => b.score.compareTo(a.score));
+
+      final selected = <String>[];
+      for (final s in sentenceScores) {
+        if (selected.length >= 3) break;
+        // Dedup: skip if >55% word overlap with already selected
+        final sWords = s.text.toLowerCase().split(RegExp(r'\W+')).toSet();
+        final isDup = selected.any((prev) {
+          final pWords = prev.toLowerCase().split(RegExp(r'\W+')).toSet();
+          final inter = sWords.intersection(pWords).length;
+          return inter / sWords.length.clamp(1, 9999) > 0.55;
+        });
+        if (!isDup) selected.add(s.text);
+      }
+
+      if (selected.isNotEmpty) {
+        final answer = selected.join(' ');
+        return '$answer\n\n─ *Extracted from your notes*';
+      }
+    }
+
+    // ── Step 3: Fallback — score full chunks, return top chunk excerpt ─────
+    // This handles the case where the chunk has no clear sentence boundaries.
+    final chunkScores = chunks.take(5).toList().asMap().entries.map((e) {
+      final cTokens = e.value
+          .toLowerCase()
+          .split(RegExp(r'\W+'))
+          .where((t) => t.length > 2)
+          .toSet();
+      final overlap = qTokens.intersection(cTokens).length;
+      return (chunk: e.value, score: overlap.toDouble(), idx: e.key);
+    }).toList()
+      ..sort((a, b) => b.score.compareTo(a.score));
+
+    final bestChunk = chunkScores.first.chunk;
+    return _cleanExcerpt(bestChunk);
+  }
+
+  /// Returns clean excerpt from a chunk, snapped to sentence boundary
+  String _cleanExcerpt(String chunk) {
+    final trimmed = chunk.trim();
+    if (trimmed.length <= 400) return '$trimmed\n\n─ *From your notes*';
+    final sub = trimmed.substring(0, 400);
+    // Try to snap back to the last complete sentence
+    final lastDot = sub.lastIndexOf('. ');
+    final excerpt = lastDot > 80 ? sub.substring(0, lastDot + 1) : sub;
+    return '$excerpt…\n\n─ *From your notes*';
   }
 }
